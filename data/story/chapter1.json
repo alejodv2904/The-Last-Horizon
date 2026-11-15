@@ -1,0 +1,212 @@
+{
+  "chapter": 1,
+  "chapterTitle": "Capítulo I",
+  "chapterSubtitle": "Valle de Cedar Hollow",
+  "player": {
+    "name": "Eli Harlan"
+  },
+  "npcs": {
+    "silas": {
+      "name": "Silas Crane",
+      "role": "Líder del campamento"
+    },
+    "pike": {
+      "name": "Jonás Pike",
+      "role": "Trampero y comerciante"
+    }
+  },
+  "intro": {
+    "title": "Campamento",
+    "objectives": [
+      {
+        "text": "Habla con Silas Crane junto a la fogata"
+      }
+    ]
+  },
+  "items": {
+    "venison": {
+      "name": "Carne de venado",
+      "icon": "🥩",
+      "desc": "Carne fresca. El campamento la necesita."
+    },
+    "deer_pelt": {
+      "name": "Piel de ciervo",
+      "icon": "🦌",
+      "desc": "Piel en buen estado. Algún comerciante pagará por ella."
+    },
+    "buck_antlers": {
+      "name": "Astas de macho",
+      "icon": "🦴",
+      "desc": "Un trofeo bonito."
+    },
+    "ammo": {
+      "name": "Cartuchos .44",
+      "icon": "🔸",
+      "desc": "Munición para el rifle de palanca."
+    },
+    "wolf_pelt": {
+      "name": "Piel de lobo",
+      "icon": "🐺",
+      "desc": "Gruesa y gris. Pike paga bien por ellas."
+    }
+  },
+  "missions": {
+    "m01_hunt": {
+      "title": "Carne para el campamento",
+      "giver": "silas",
+      "objectives": [
+        {
+          "id": "hunt",
+          "type": "collect",
+          "item": "venison",
+          "count": 2,
+          "text": "Caza y despelleja ciervos"
+        },
+        {
+          "id": "return",
+          "type": "talk",
+          "npc": "silas",
+          "text": "Lleva la carne a Silas"
+        }
+      ],
+      "rewards": {
+        "money": 12.5,
+        "items": {
+          "ammo": 12
+        },
+        "flags": [
+          "camp_fed"
+        ]
+      },
+      "completeTitle": "MISIÓN COMPLETADA",
+      "completeSubtitle": "Carne para el campamento",
+      "nextHint": {
+        "title": "Capítulo I — continuará",
+        "objectives": [
+          {
+            "text": "Vende pieles en el puesto de Jonás Pike (sigue el camino al noroeste)"
+          },
+          {
+            "text": "Cuidado con los lobos de los pinares"
+          },
+          {
+            "text": "Silas tiene algo que contarte sobre los Hargrove"
+          }
+        ]
+      }
+    }
+  },
+  "dialogues": {
+    "silas": [
+      {
+        "when": {
+          "flag": "camp_fed"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Hacía semanas que no veía a esta gente sonreír."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si te sobran pieles, llévalas a Jonás Pike, siguiendo el camino al noroeste. Y no entres en los pinares de noche: los lobos andan hambrientos."
+          },
+          {
+            "speaker": "npc",
+            "text": "Descansa, Eli. Mañana hablaremos de los Hargrove… y de lo que todavía nos deben."
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "m01_hunt",
+          "state": "ready"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡Por todos los santos! Eso huele a cena."
+          },
+          {
+            "speaker": "player",
+            "text": "Dos ciervos, bien limpios. Hay carne para unos cuantos días."
+          },
+          {
+            "speaker": "npc",
+            "text": "Buen trabajo. Pondré la olla al fuego. Toma, te lo has ganado."
+          }
+        ],
+        "action": "complete:m01_hunt"
+      },
+      {
+        "when": {
+          "mission": "m01_hunt",
+          "state": "active"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¿Todavía con las manos vacías? Dos ciervos. Busca en las praderas, lejos del humo."
+          },
+          {
+            "speaker": "npc",
+            "text": "Camina, no corras. Apunta con calma y dispara al pecho."
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "m01_hunt",
+          "state": "available"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Vaya, mira quién se digna a volver. Pensé que te habías largado con los Hargrove."
+          },
+          {
+            "speaker": "player",
+            "text": "Sigo aquí, Silas. ¿Cómo anda el campamento?"
+          },
+          {
+            "speaker": "npc",
+            "text": "Mal. La harina se acabó hace dos días y los críos ya mastican cuero de silla."
+          },
+          {
+            "speaker": "npc",
+            "text": "Vi rastros de ciervo junto al arroyo, al noreste, y otra manada en las praderas del oeste."
+          },
+          {
+            "speaker": "npc",
+            "text": "Tráeme la carne de dos ciervos. Y muévete despacio: si corres, te oirán a una legua."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Déjamelo a mí.",
+            "action": "accept:m01_hunt",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "Esta noche se come caliente."
+              },
+              {
+                "speaker": "npc",
+                "text": "Eso espero. Y no malgastes balas, que tampoco nos sobran."
+              }
+            ]
+          },
+          {
+            "text": "Dame un minuto.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Los estómagos no esperan, muchacho. Aquí estaré."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

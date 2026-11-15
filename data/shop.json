@@ -1,0 +1,16 @@
+{
+  "npc": "pike",
+  "title": "Puesto de comercio de Jonás Pike",
+  "greeting": "Pieles por dólares, dólares por plomo. Así funciona esto, forastero.",
+  "sell": [
+    { "id": "deer_pelt", "price": 4.25 },
+    { "id": "buck_antlers", "price": 3.0 },
+    { "id": "wolf_pelt", "price": 6.5 },
+    { "id": "venison", "price": 1.25 }
+  ],
+  "buy": [
+    { "id": "ammo_box", "name": "Caja de cartuchos .44", "desc": "12 cartuchos para el rifle de palanca.", "icon": "🔸", "price": 3.0, "give": { "ammo": 12 } },
+    { "id": "up_barrel", "name": "Cañón largo estriado", "desc": "+45 % de alcance, menos dispersión y más zoom al apuntar.", "icon": "🔭", "price": 18.0, "upgrade": "barrel" },
+    { "id": "up_rounds", "name": "Cartuchos expansivos", "desc": "+60 % de daño: un lobo cae de un solo disparo.", "icon": "💥", "price": 14.0, "upgrade": "rounds" }
+  ]
+}
