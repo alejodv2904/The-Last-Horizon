@@ -177,6 +177,7 @@ class Horse {
     const hf = w.getHeightAt(p.x + this._fwd.x * 0.9, p.z + this._fwd.z * 0.9), hb = w.getHeightAt(p.x - this._fwd.x * 0.9, p.z - this._fwd.z * 0.9);
     this.pitch = damp(this.pitch, -Math.atan2(hf - hb, 1.8), 8, dt);
     this.tracks.push(p);
+    if (this.speed > 2) g.fx.impact.footprint(p.x, p.y, p.z, this.heading, 2.4, true);   // huellas de herradura (pool de decals)
 
     const dCam = g.camera.position.distanceTo(p);
     const visible = dCam < 260;

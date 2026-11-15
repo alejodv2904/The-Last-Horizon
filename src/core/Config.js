@@ -87,8 +87,27 @@ const CONFIG = {
   AMBUSH: { FIRST_DELAY: 110, MIN_GAP: 200, MAX_GAP: 380, SAFE_RADIUS: 95, RESCUE_CHANCE: 0.35 },
 };
 
+// --- Fase 5B: campamentos reubicables (la campaña mueve a la banda de sitio entre capítulos) ---
+CONFIG.CAMP_SITES = {
+  cedar: { x: 0, z: 0, style: 'tents', name: 'Cedar Hollow' },
+  cedar_ruins: { x: 0, z: 0, style: 'ruins', name: 'Cedar Hollow (en ruinas)' },
+  swamp: { x: -560, z: -560, style: 'swamp', name: 'Sauces Negros' },
+  mesa: { x: 640, z: -520, style: 'mesa', name: 'Mesa Quebrada' },
+  ranch: { x: 500, z: 560, style: 'ranch', name: 'Rancho La Rueda' },
+};
+// Biomas nuevos: zonas circulares con suelo, vegetación y niebla propios (se mezclan suavemente con la pradera).
+// veg = multiplicador de densidad por tipo de vegetación; fogMul = multiplicador de la niebla dentro del bioma.
+CONFIG.BIOMES = [
+  { id: 'swamp', x: -560, z: -560, r: 220, ground: [0x3c4a2c, 0x4b5636], veg: { pine: 0.5, oak: 2.2, rock: 0.3, sage: 0.15, grass: 0.9 }, fog: 0x667a5c, fogMul: 2.0, flatten: 0.8 },
+  { id: 'desert', x: 620, z: -560, r: 280, ground: [0xc79a62, 0xb5824c], veg: { pine: 0, oak: 0, rock: 1.9, sage: 1.3, grass: 0.12 }, fog: 0xe8c99c, fogMul: 0.75, flatten: 0 },
+  { id: 'snow', x: -700, z: 700, r: 260, ground: [0xe9eff3, 0xd2dce3], veg: { pine: 1.5, oak: 0, rock: 1.3, sage: 0, grass: 0 }, fog: 0xdbe6ee, fogMul: 1.5, flatten: 0 },
+];
+// Montañas (aditivas sobre el relieve): la cima del Pico Halcón Blanco se puede escalar a pie.
+CONFIG.MOUNTAINS = [{ id: 'halcon', x: -700, z: 700, r: 120, h: 62 }];
+
 // Zonas sin vegetación y con suelo de tierra alrededor del pueblo y los campamentos.
 CONFIG.CLEAR_ZONES = [
+  ...Object.entries(CONFIG.CAMP_SITES).filter(([id]) => !id.startsWith('cedar')).map(([, c]) => ({ x: c.x, z: c.z, r: 24, dirt0: 8, dirt1: 16 })),
   { x: CONFIG.TOWN.x, z: CONFIG.TOWN.z, r: 50, dirt0: 34, dirt1: 56 },
   ...CONFIG.BANDIT_CAMPS.map((c) => ({ x: c.x, z: c.z, r: 26, dirt0: 8, dirt1: 17 })),
 ];

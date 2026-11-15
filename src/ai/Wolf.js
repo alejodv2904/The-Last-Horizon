@@ -127,11 +127,11 @@ class Wolf extends Animal {
       case WOLF_STATE.ATTACK: {
         this.neckTarget = 1.0; this.headTarget = 0.15; tailUp = -0.05;
         desired = toPlayer + (dist > 6 ? (this.index - 1) * 0.35 : 0);
-        targetSpeed = dist > 1.8 ? 8.6 : 0.8; turnRate = 7;
+        targetSpeed = dist > 1.8 ? 8.6 * (this.speedMul || 1) : 0.8; turnRate = 7;
         if (dist < 2.0 && this.attackCd <= 0 && !ctx.playerDead) {
           this.attackCd = 1.3; this.lunge = -0.35;
           this.game.audio.playBite();
-          this.game.player.takeDamage(10 + this.rand() * 8, this.position);
+          this.game.player.takeDamage((10 + this.rand() * 8) * (this.biteMul || 1), this.position);
         }
         if (dist > 70 || ctx.playerDead) { this.setState(WOLF_STATE.PATROL); break; }
         if (ctx.mounted && ctx.horseSpeed > 10 && dist > 25 && this.stateTime > 6) this.setState(WOLF_STATE.PATROL);
@@ -155,4 +155,4 @@ class Wolf extends Animal {
   }
 }
 
-export { Wolf, WOLF_STATE };
+export { Wolf, buildWolf, WOLF_STATE };

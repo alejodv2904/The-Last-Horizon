@@ -1,12 +1,15 @@
 // Proyectiles enemigos: balas trazadoras visibles (UN InstancedMesh = 1 draw call) con colisión analítica.
 // Cada frame cada bala recorre un segmento y se prueba contra: jugador (cilindro), sólidos del mundo
 // (círculos/cajas por World.segmentHit) y terreno. Sin THREE.Raycaster y sin asignar memoria.
+// Fase 5B: los registros de bala viven en un ObjectPool (reutilizados, nunca se crean en caliente) y cada impacto
+// deja agujero de bala + chispas mediante el hub de efectos (también pooled).
 import * as THREE from 'three';
 import { clamp } from '../core/MathUtils.js';
+import { ObjectPool } from '../core/ObjectPool.js';
 
 const CAP = 32;
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _Z = new THREE.Vector3(0, 0, 1);
-const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0), _n = new THREE.Vector3();
 
 class Projectiles {
   constructor(game) {
@@ -17,36 +20,37 @@ class Projectiles {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false;
     for (let i = 0; i < CAP; i++) this.mesh.setMatrixAt(i, _zero);
     game.scene.add(this.mesh);
-    this.list = Array.from({ length: CAP }, () => ({ alive: false, pos: new THREE.Vector3(), dir: new THREE.Vector3(), speed: 0, life: 0, dmg: 0, owner: null, whizzed: false }));
-    this.cursor = 0; this.activeCount = 0;
+    let n = 0;
+    this.pool = new ObjectPool(
+      () => ({ i: n++, pos: new THREE.Vector3(), dir: new THREE.Vector3(), speed: 0, life: 0, dmg: 0, owner: null, whizzed: false }),
+      (b) => { b.owner = null; this.mesh.setMatrixAt(b.i, _zero); },
+      CAP, { recycleOldest: true },
+    );
+    this.activeCount = 0;
   }
 
+  // Devuelve la bala reservada del pool (o null si no cabe; con recycleOldest siempre habrá una).
   fire(origin, dir, speed, dmg, owner) {
-    for (let k = 0; k < CAP; k++) {
-      const b = this.list[(this.cursor + k) % CAP];
-      if (b.alive) continue;
-      this.cursor = (this.cursor + k + 1) % CAP;
-      b.alive = true; b.pos.copy(origin); b.dir.copy(dir); b.speed = speed; b.life = 2.2; b.dmg = dmg; b.owner = owner; b.whizzed = false;
-      return b;
-    }
-    return null;
+    const b = this.pool.acquire(); if (!b) return null;
+    b.pos.copy(origin); b.dir.copy(dir); b.speed = speed; b.life = 2.2; b.dmg = dmg; b.owner = owner; b.whizzed = false;
+    return b;
   }
 
   update(dt) {
-    const g = this.game, w = g.world, pl = g.player, pp = pl.position;
-    let active = 0, dirty = false;
+    const g = this.game, w = g.world, pl = g.player, pp = pl.position, act = this.pool.active;
+    this.activeCount = act.length;
+    if (!act.length) return;
     const playerDead = g.mode === 'dead' || !g.started;
-    for (let i = 0; i < CAP; i++) {
-      const b = this.list[i];
-      if (!b.alive) continue;
-      active++; dirty = true;
+    for (let k = act.length - 1; k >= 0; k--) {
+      const b = act[k];
+      if (!b) continue;   // la lista pudo vaciarse a mitad de bucle (el jugador murió → clear()): los registros ya están liberados
       const step = b.speed * dt, ax = b.pos.x, ay = b.pos.y, az = b.pos.z;
       const bx = ax + b.dir.x * step, by = ay + b.dir.y * step, bz = az + b.dir.z * step;
       b.life -= dt;
-      let kill = b.life <= 0, impact = null;
+      let kill = b.life <= 0, impact = null, nx = 0, ny = 1, nz = 0;
 
       // 1) jugador: cilindro vertical (más alto si va a caballo)
-      if (!playerDead) {
+      if (!playerDead && !pl.invulnerable) {
         const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz;
         const t = L2 > 1e-9 ? clamp(((pp.x - ax) * vx + (pp.z - az) * vz) / L2, 0, 1) : 0;
         const cx = ax + vx * t, cz = az + vz * t, cy = ay + (by - ay) * t;
@@ -59,25 +63,25 @@ class Projectiles {
       // 2) mundo
       if (!impact) {
         const t = w.segmentHit(ax, ay, az, bx, by, bz);
-        if (t >= 0) impact = { x: ax + (bx - ax) * t, y: ay + (by - ay) * t, z: az + (bz - az) * t };
+        if (t >= 0) { impact = { x: ax + (bx - ax) * t, y: ay + (by - ay) * t, z: az + (bz - az) * t }; nx = -b.dir.x; ny = -b.dir.y; nz = -b.dir.z; }
         else if (by < w.getHeightAt(bx, bz)) impact = { x: bx, y: Math.max(by, w.getHeightAt(bx, bz)), z: bz };
       }
       if (impact) {
         kill = true; _p.set(impact.x, impact.y, impact.z);
         if (impact.player) pl.takeDamage(b.dmg, b.owner ? b.owner.position : null);
         else {
-          g.fx.dust.burst(_p, 6, { color: 0x9a8a70, size: 0.16, life: 0.7, speed: 1.4, up: 1.4, gravity: 4, alpha: 0.7, grow: 1.5, drag: 1.2 });
+          _n.set(nx, ny, nz);
+          g.fx.impact.hit(_p, _n, 'dirt');
           g.fx.glow.burst(_p, 2, { color: 0xffc070, size: 0.04, life: 0.2, speed: 3, up: 1, gravity: 8 });
         }
       }
-      if (kill) { b.alive = false; this.mesh.setMatrixAt(i, _zero); continue; }
+      if (kill) { this.pool.release(b); continue; }
       b.pos.set(bx, by, bz);
-      _q.setFromUnitVectors(_Z, b.dir); _m.compose(b.pos, _q, _s); this.mesh.setMatrixAt(i, _m);
+      _q.setFromUnitVectors(_Z, b.dir); _m.compose(b.pos, _q, _s); this.mesh.setMatrixAt(b.i, _m);
     }
-    this.activeCount = active;
-    if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceMatrix.needsUpdate = true;
   }
-  clear() { for (let i = 0; i < CAP; i++) { this.list[i].alive = false; this.mesh.setMatrixAt(i, _zero); } this.mesh.instanceMatrix.needsUpdate = true; }
+  clear() { this.pool.releaseAll(); this.mesh.instanceMatrix.needsUpdate = true; }
 }
 
 export { Projectiles };

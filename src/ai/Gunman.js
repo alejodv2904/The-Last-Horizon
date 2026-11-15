@@ -77,6 +77,7 @@ class Gunman {
     const p = this.game.player;
     let r = B.DETECT * (ctx.night > 0.5 ? 0.78 : 1);
     if (p.riding) r += 8; if (p.isRunning) r += 8; if (p.isAiming) r *= 0.85;
+    if (p.isCrouching) r *= 0.28;   // agachado y quieto/lento: solo te ve quien está casi encima
     return r;
   }
   _perceive(ctx) {

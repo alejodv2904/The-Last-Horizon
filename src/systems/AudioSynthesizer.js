@@ -1,25 +1,58 @@
 import { clamp } from '../core/MathUtils.js';
+import { MusicEngine } from './MusicEngine.js';
 
 class AudioSynthesizer {
-  constructor() { this.ctx = null; this.ready = false; this._paramTimer = 0; this._music = null; }
+  constructor(settings = null) {
+    this.ctx = null; this.ready = false; this._paramTimer = 0; this._music = null; this.music = null; this.settings = settings;
+    this.vol = { music: settings ? settings.get('music') : 0.7, sfx: settings ? settings.get('sfx') : 0.85, ambient: settings ? settings.get('ambient') : 0.8 };
+    this.duck = 1;
+  }
 
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = this.ctx = new AC();
-    this.master = ctx.createGain(); this.master.gain.value = 0.75;
+    // Tres buses independientes (Efectos / Ambiente / Música) → salida común → filtro de "cámara lenta" → compresor.
+    this.out = ctx.createGain(); this.out.gain.value = 0.75;
+    this.tone = ctx.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 20000; this.tone.Q.value = 0.5;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.25;
-    this.master.connect(comp); comp.connect(ctx.destination);
+    this.out.connect(this.tone); this.tone.connect(comp); comp.connect(ctx.destination);
+    this.master = ctx.createGain(); this.master.gain.value = this.vol.sfx; this.master.connect(this.out);      // bus de EFECTOS
+    this.ambBus = ctx.createGain(); this.ambBus.gain.value = this.vol.ambient; this.ambBus.connect(this.out);  // bus de AMBIENTE
+    this.musicBus = ctx.createGain(); this.musicBus.gain.value = this.vol.music * this.duck; this.musicBus.connect(this.out);  // bus de MÚSICA
     this.whiteBuffer = this._noiseBuffer(2, 'white');
     this.brownBuffer = this._noiseBuffer(4, 'brown');
     this.reverb = ctx.createConvolver(); this.reverb.buffer = this._impulse(3.0, 2.6);
     this.reverbSend = ctx.createGain(); this.reverbSend.gain.value = 0.32;
     this.reverbSend.connect(this.reverb); this.reverb.connect(this.master);
+    this.reverbMusic = ctx.createConvolver(); this.reverbMusic.buffer = this._impulse(2.6, 2.4); this.reverbMusic.connect(this.musicBus);   // reverb propio de la música
     this._startWind(); this._startFire(); this._startCrickets();
     this.ready = true;
+    this.music = new MusicEngine(this);
+    this.music.setLayers(this.settings ? this.settings.quality.musicLayers : 4);
+    this.music.start();
   }
+
+  /* ---------- Volúmenes independientes (menú de pausa) ---------- */
+  setVolume(kind, v) {
+    v = clamp(v, 0, 1); this.vol[kind] = v;
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (kind === 'sfx') this.master.gain.setTargetAtTime(v, t, 0.05);
+    else if (kind === 'ambient') this.ambBus.gain.setTargetAtTime(v, t, 0.05);
+    else if (kind === 'music') this.musicBus.gain.setTargetAtTime(v * this.duck, t, 0.05);
+  }
+  // La música baja durante los diálogos para que se entiendan; Dead Eye apaga los agudos (todo suena "bajo el agua").
+  setDuck(on) { this.duck = on ? 0.5 : 1; if (this.ready) this.musicBus.gain.setTargetAtTime(this.vol.music * this.duck, this.ctx.currentTime, 0.4); }
+  setSlowmo(on) {
+    if (!this.ready) return;
+    this.tone.frequency.setTargetAtTime(on ? 900 : 20000, this.ctx.currentTime, on ? 0.12 : 0.35);
+    if (this.music) this.music.setSlowmo(on);
+  }
+  // Se llama cada frame (también en pausa) para que la música no se corte al abrir el menú.
+  updateMusic(state) { if (this.ready && this.music) { if (state) this.music.setState(state); this.music.update(); } }
   _noiseBuffer(seconds, type) {
     const ctx = this.ctx, len = Math.floor(ctx.sampleRate * seconds);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -61,7 +94,7 @@ class AudioSynthesizer {
     this.windBus = this._gain(1);
     src.connect(bp); bp.connect(g); g.connect(this.windBus);
     src2.connect(bp2); bp2.connect(g2); g2.connect(this.windBus);
-    this.windBus.connect(this.master);
+    this.windBus.connect(this.ambBus);
     src.start(); src2.start(Math.random());
   }
   _startFire() {
@@ -70,7 +103,7 @@ class AudioSynthesizer {
     const lp = this._filter('lowpass', 700, 0.5);
     const g = this._gain(0.35);
     src.connect(lp); lp.connect(g); g.connect(this.fireBus);
-    this.fireBus.connect(this.master);
+    this.fireBus.connect(this.ambBus);
     src.start(0, 1.3);
   }
   _pop(vol) {
@@ -81,7 +114,7 @@ class AudioSynthesizer {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(vol * (0.15 + Math.random() * 0.35), t + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + Math.random() * 0.05);
-    s.connect(hp); hp.connect(g); g.connect(this.master);
+    s.connect(hp); hp.connect(g); g.connect(this.ambBus);
     s.start(t, Math.random() * 1.5); s.stop(t + 0.1);
   }
   _startCrickets() {
@@ -94,7 +127,7 @@ class AudioSynthesizer {
     const lfo2 = ctx.createOscillator(); lfo2.type = 'square'; lfo2.frequency.value = 0.9;
     const lfo2G = this._gain(0.5); lfo2.connect(lfo2G); lfo2G.connect(pulse.gain);
     this.cricketBus = this._gain(0);
-    osc.connect(am); am.connect(pulse); pulse.connect(this.cricketBus); this.cricketBus.connect(this.master);
+    osc.connect(am); am.connect(pulse); pulse.connect(this.cricketBus); this.cricketBus.connect(this.ambBus);
     const osc2 = ctx.createOscillator(); osc2.frequency.value = 4720;
     const am2 = this._gain(0.3); this._lfo(19, 0.3, am2.gain);
     osc2.connect(am2); am2.connect(this.cricketBus);
@@ -185,10 +218,10 @@ class AudioSynthesizer {
     });
   }
 
-  playGunshot() {
+  playGunshot(vol = 1) {
     if (!this.ready) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const out = this._gain(1); out.connect(this.master); out.connect(this.reverbSend);
+    const out = this._gain(vol); out.connect(this.master); out.connect(this.reverbSend);
     const n1 = this._src(this.whiteBuffer); const hp = this._filter('highpass', 1000, 0.7); const g1 = this._gain(0);
     g1.gain.setValueAtTime(1.1, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
     n1.connect(hp); hp.connect(g1); g1.connect(out); n1.start(t, Math.random()); n1.stop(t + 0.25);
@@ -279,8 +312,8 @@ class AudioSynthesizer {
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.03, t + 0.6); g.gain.linearRampToValueAtTime(0.025, t + 2.2); g.gain.exponentialRampToValueAtTime(0.0005, t + 3.1);
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     o.connect(g);
-    if (pan) { pan.pan.value = Math.random() * 2 - 1; g.connect(pan); pan.connect(this.reverbSend); pan.connect(this.master); }
-    else { g.connect(this.reverbSend); g.connect(this.master); }
+    if (pan) { pan.pan.value = Math.random() * 2 - 1; g.connect(pan); pan.connect(this.reverbSend); pan.connect(this.ambBus); }
+    else { g.connect(this.reverbSend); g.connect(this.ambBus); }
     o.start(t); vib.start(t); o.stop(t + 3.2); vib.stop(t + 3.2);
   }
   _vol(base, distance, range) { return base * clamp(1 - distance / range, 0, 1); }
@@ -410,6 +443,39 @@ class AudioSynthesizer {
     notes.forEach((f, i) => this._pluck(t + i * 0.13, f, 0.1, 2.2));
     this._pluck(t + 1.25, 329.63, 0.1, 2.8); this._pluck(t + 1.25, 415.3, 0.08, 2.8); this._pluck(t + 1.25, 493.88, 0.08, 2.8);
   }
+
+  /* ---------- Fase 5B: Dead Eye y duelos ---------- */
+  // Entrada: latido grave + barrido descendente ("el mundo se ralentiza"). Salida: barrido ascendente corto.
+  playDeadEye(on) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(on ? 640 : 120, t); o.frequency.exponentialRampToValueAtTime(on ? 90 : 520, t + (on ? 0.55 : 0.35));
+    const g = this._gain(0); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.1, t + 0.08); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(g); g.connect(this.master); g.connect(this.reverbSend); o.start(t); o.stop(t + 0.75);
+    if (on) for (let i = 0; i < 2; i++) {
+      const h = ctx.createOscillator(); h.frequency.setValueAtTime(66, t + 0.1 + i * 0.3); h.frequency.exponentialRampToValueAtTime(38, t + 0.28 + i * 0.3);
+      const hg = this._gain(0); hg.gain.setValueAtTime(0.4, t + 0.1 + i * 0.3); hg.gain.exponentialRampToValueAtTime(0.001, t + 0.34 + i * 0.3);
+      h.connect(hg); hg.connect(this.master); h.start(t + 0.1 + i * 0.3); h.stop(t + 0.4 + i * 0.3);
+    }
+  }
+  playMark() {   // tic metálico al marcar un objetivo
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this._click(t, 2600, 0.12); this._click(t + 0.045, 3400, 0.1);
+    const o = this.ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.12);
+    const g = this._gain(0); g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14); o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.16);
+  }
+  playBell() {   // campana de iglesia lejana: señal de "¡Fuego!" en los duelos
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [[1, 0.2, 2.6], [2.76, 0.1, 1.9], [5.4, 0.06, 1.2], [8.9, 0.03, 0.8]].forEach(([k, v, d]) => {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 392 * k;
+      const g = this._gain(0); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0005, t + d);
+      o.connect(g); g.connect(this.master); g.connect(this.reverbSend); o.start(t); o.stop(t + d + 0.05);
+    });
+  }
+  playDuelTick() { if (this.ready) this._click(this.ctx.currentTime, 1700, 0.07); }
 }
 
 export { AudioSynthesizer };

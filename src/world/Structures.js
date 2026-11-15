@@ -14,24 +14,51 @@ function toWorld(ox, oz, yaw, lx, lz) {
 }
 
 /* ------------------------------------------------------------------ Campamento */
-function buildCamp(world) {
-  const scene = world.scene, cx = CONFIG.CAMP.x, cz = CONFIG.CAMP.z;
+// Fase 5B: el campamento es reubicable. `site` = { x, z, style } de CONFIG.CAMP_SITES.
+// Estilos: tents (Cedar Hollow) · swamp (Sauces Negros) · mesa (Mesa Quebrada) · ranch (Rancho La Rueda) · ruins (Cedar Hollow quemado).
+// Los obstáculos se devuelven en `obstacles` (el mundo los añade/quita al mudar de sitio) y la luz del fuego es UNA sola, compartida.
+function buildCamp(world, site = CONFIG.CAMP_SITES.cedar) {
+  const scene = world.scene, cx = site.x, cz = site.z, style = site.style || 'tents';
   const y0 = world.getHeightAt(cx, cz);
-  const all = [], obs = world.staticObstacles;
+  const all = [], obs = [];
+  const TENT = { tents: 0xd8c9a3, swamp: 0xa9b08c, mesa: 0xd89a72, ruins: 0x2c2622, ranch: 0xd8c9a3 }[style] || 0xd8c9a3;
   const place = (builder, x, z, yaw) => {
     const g = builder.build();
     _m4.compose(_v1.set(cx + x, y0, cz + z), _q.setFromEuler(_e.set(0, yaw, 0, 'YXZ')), _sc.set(1, 1, 1));
     g.applyMatrix4(_m4); all.push(g);
   };
   const tent = () => new GeoBuilder()
-    .add(Cyl(1.7, 1.7, 3.2, 3), 0xd8c9a3, 0, 0.85, 0, -Math.PI / 2, 0, 0)
+    .add(Cyl(1.7, 1.7, 3.2, 3), TENT, 0, 0.85, 0, -Math.PI / 2, 0, 0)
     .add(Cyl(0.75, 0.75, 0.04, 3), 0x2a2018, 0, 0.42, 1.62, -Math.PI / 2, 0, 0)
     .add(Cyl(0.04, 0.04, 2.9, 4), 0x5a3d26, 0, 1.45, 1.66)
     .add(Cyl(0.04, 0.04, 2.9, 4), 0x5a3d26, 0, 1.45, -1.66)
     .add(Box(1.2, 0.12, 2.0), 0x6b4a3a, 0.4, 0.06, 2.6);
-  place(tent(), 6.8, 3.2, -2.0);
-  place(tent(), -5.4, 6.2, 2.5);
-  obs.push({ x: cx + 6.8, z: cz + 3.2, r: 2.0 }, { x: cx - 5.4, z: cz + 6.2, r: 2.0 });
+  if (style !== 'ranch') {
+    place(tent(), 6.8, 3.2, -2.0);
+    place(tent(), -5.4, 6.2, 2.5);
+    obs.push({ x: cx + 6.8, z: cz + 3.2, r: 2.0 }, { x: cx - 5.4, z: cz + 6.2, r: 2.0 });
+  }
+  if (style === 'swamp') {   // plataforma de tablones sobre el barro y postes con farolas
+    place(new GeoBuilder().add(Box(9, 0.22, 9), 0x5a4630, 0, 0.1, 0).add(Box(4, 0.2, 14), 0x4e3c28, 6, 0.09, 4), 0, 0, 0.2);
+    [[-4.2, -4.2], [4.2, 4.2], [4.2, -4.2]].forEach(([x, z]) => place(new GeoBuilder().add(Cyl(0.07, 0.09, 2.6, 5), 0x4a3a28, 0, 1.3, 0).add(Box(0.22, 0.28, 0.22), 0xffc070, 0, 2.55, 0), x, z, 0));
+  } else if (style === 'mesa') {   // abrigo de rocas contra el viento y toldo de lona
+    [[-3.5, -6, 1.7], [-1.2, -6.8, 1.3], [1.4, -6.3, 1.5], [3.6, -5.6, 1.2]].forEach(([x, z, r]) => {
+      place(new GeoBuilder().add(new THREE.DodecahedronGeometry(r, 0), 0x9a7c62, 0, r * 0.5, 0, 0, 0.6, 0, 1, 0.75, 1), x, z, 0); obs.push({ x: cx + x, z: cz + z, r: r * 0.9 });
+    });
+    place(new GeoBuilder().add(Box(3.4, 0.08, 2.4), 0xe2d2ad, 0, 2.2, 0, 0.12, 0, 0).add(Cyl(0.05, 0.06, 2.2, 5), 0x5a3d26, -1.6, 1.1, -1.1).add(Cyl(0.05, 0.06, 2.0, 5), 0x5a3d26, 1.6, 1.0, -1.1), -8, 1.5, 0.3);
+  } else if (style === 'ranch') {   // casa de troncos, establo abierto y corral
+    const house = new GeoBuilder().add(Box(8, 3, 5.6), 0x7a5536, 0, 1.5, 0).add(Box(8.8, 0.18, 3.6), 0x4a3a2c, 0, 3.55, 1.45, 0.5, 0, 0).add(Box(8.8, 0.18, 3.6), 0x4a3a2c, 0, 3.55, -1.45, -0.5, 0, 0)
+      .add(Box(1.2, 2.1, 0.1), 0x2a1e14, 0, 1.05, 2.82).add(Box(0.9, 0.9, 0.1), 0x2a1e14, -2.4, 1.6, 2.82).add(Box(0.8, 5.0, 0.8), 0x7d756c, 3.2, 3.0, -1.4);
+    place(house, -4, 3, 0.35); obs.push({ x: cx - 4, z: cz + 3, r: 3.8 }, { x: cx - 2, z: cz + 4.2, r: 3.0 });
+    const fence = new GeoBuilder();
+    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; fence.add(Cyl(0.07, 0.08, 1.3, 5), 0x6b4a2e, Math.sin(a) * 6.5, 0.65, Math.cos(a) * 6.5).add(Box(0.07, 0.08, 4.1), 0x7a5a38, Math.sin(a + 0.2) * 6.5, 1.0, Math.cos(a + 0.2) * 6.5, 0, a + 0.2 + Math.PI / 2, 0); }
+    place(fence, 11, -3, 0);
+    place(new GeoBuilder().add(Box(5.5, 0.18, 4), 0x4a3a2c, 0, 3.0, 0, 0.14, 0, 0).add(Cyl(0.1, 0.12, 3, 5), 0x5a3d26, -2.6, 1.5, -1.8).add(Cyl(0.1, 0.12, 2.6, 5), 0x5a3d26, 2.6, 1.3, -1.8).add(Box(1.4, 0.7, 0.8), 0x8a6a42, 1.4, 0.35, 0.2), 4, 9, -0.3);
+  } else if (style === 'ruins') {   // postes quemados, carro volcado, pilas de cenizas
+    for (let i = 0; i < 9; i++) { const a = i * 0.7 + 0.4, r = 5 + (i % 3) * 3.2; place(new GeoBuilder().add(Cyl(0.07, 0.1, 1.2 + (i % 4) * 0.5, 5), 0x1e1a18, 0, 0.5, 0, (i % 3 - 1) * 0.25, 0, (i % 2 - 0.5) * 0.3), Math.sin(a) * r, Math.cos(a) * r, 0); }
+    place(new GeoBuilder().add(Box(1.6, 0.5, 3.2), 0x2a2220, 0, 0.5, 0, 0, 0, 1.2).add(Cyl(0.55, 0.55, 0.08, 10), 0x1c1816, 1.0, 0.9, 0.9, 0, 0, Math.PI / 2), -8, 7, 0.9);
+    for (let i = 0; i < 6; i++) place(new GeoBuilder().add(Cyl(1.0 + (i % 2) * 0.6, 1.3, 0.05, 7), 0x211c1a, 0, 0.03, 0), Math.sin(i * 1.3) * 7, Math.cos(i * 1.3) * 7 - 2, 0);
+  }
 
   const fire = new GeoBuilder().add(Cyl(0.75, 0.8, 0.05, 10), 0x2a2522, 0, 0.03, 0);
   for (let i = 0; i < 10; i++) {
@@ -42,7 +69,7 @@ function buildCamp(world) {
   place(fire, 0, 0, 0);
   obs.push({ x: cx, z: cz, r: 1.1 });
 
-  [0.6, 1.9, 5.4].forEach((a) => {
+  [0.6, 1.9, 5.4].filter(() => style !== 'ruins').forEach((a) => {
     const lx = Math.sin(a) * 3.3, lz = Math.cos(a) * 3.3;
     place(new GeoBuilder().add(Cyl(0.25, 0.27, 2.2, 7), 0x6b4a2e, 0, 0.24, 0, 0, 0, Math.PI / 2), lx, lz, a + Math.PI / 2);
     const tx = Math.cos(a) * 0.7, tz = -Math.sin(a) * 0.7;
@@ -98,9 +125,7 @@ function buildCamp(world) {
   const fireGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlowTexture('rgba(255,240,180,1)', 'rgba(255,120,30,0.8)'), color: 0xffa050, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 }));
   fireGlow.scale.set(3.2, 3.2, 1); fireGlow.position.y = 0.6; flames.add(fireGlow);
   scene.add(flames);
-  const fireLight = new THREE.PointLight(0xff8a3a, 30, 32, 1.6);
-  fireLight.position.set(cx, y0 + 1.3, cz);
-  scene.add(fireLight);
+  const fireLight = world.campLight;   // luz compartida entre sitios (una sola luz = sin recompilar shaders al mudarse)
 
   // Objetos que aparecen cuando el campamento está alimentado (estado del mundo)
   const fed = new GeoBuilder();
@@ -123,7 +148,8 @@ function buildCamp(world) {
   fedProps.castShadow = true; fedProps.visible = false;
   scene.add(fedProps);
 
-  return { mesh, lantern, flames, flameMeshes, fireGlow, fireLight, fedProps, firePos: new THREE.Vector3(cx, y0, cz) };
+  const objects = [mesh, lantern, flames, fedProps];
+  return { mesh, lantern, flames, flameMeshes, fireGlow, fireLight, fedProps, firePos: new THREE.Vector3(cx, y0, cz), obstacles: obs, objects, site, style };
 }
 
 /* ------------------------------------------------------- Puesto de comercio (cabaña del trampero) */
