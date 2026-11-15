@@ -20,7 +20,16 @@ class UIManager {
       banner: $('banner'), bannerTitle: $('banner-title'), bannerSub: $('banner-sub'),
       inventory: $('inventory'), invMoney: $('inv-money'), invList: $('inv-list'),
       damage: $('damage-flash'), shop: $('shop'), save: $('save-ind'), fade: $('fade'), fadeText: $('fade-text'),
+      honorTier: $('honor-tier'), honorDelta: $('honor-delta'), honorMark: $('honor-mark'),
+      wanted: $('wanted'), wantedStars: $('wanted-stars'), wantedText: $('wanted-text'),
+      bark: $('bark'), barkWho: $('bark').querySelector('.who'), barkTxt: $('bark').querySelector('.txt'),
+      quick: $('quick-use'), hitDir: $('hit-dir'), board: $('board'),
     };
+    this._barkTimer = null; this._honorTimer = null; this._boardHandler = null; this.inventoryUsable = [];
+    this.el.board.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-action]');
+      if (b && this._boardHandler && !b.disabled) this._boardHandler(b.dataset.action, b.dataset.id);
+    });
     this.radar = $('radar').getContext('2d');
     this._prompt = null; this._typing = null; this._bannerTimer = null; this._hitTimer = null; this._saveTimer = null;
     this._cache = {};
@@ -87,7 +96,8 @@ class UIManager {
       this.el.ring.style.opacity = aim > 0.5 ? 0.25 : 0.7;
     });
   }
-  hitMarker() {
+  hitMarker(headshot = false) {
+    this.el.hit.style.filter = headshot ? 'hue-rotate(150deg) brightness(2)' : '';
     this.el.hit.classList.add('show');
     clearTimeout(this._hitTimer);
     this._hitTimer = setTimeout(() => this.el.hit.classList.remove('show'), 120);
@@ -118,11 +128,11 @@ class UIManager {
   }
   isTyping() { return !!this._typing && this._typing.shown < this._typing.text.length; }
   finishTyping() { if (!this._typing) return; this._typing.shown = this._typing.text.length; this.el.text.textContent = this._typing.text; }
-  showChoices(list) {
+  showChoices(list, disabled = []) {
     this.el.speaker.textContent = this.story.player.name; this.el.text.textContent = ''; this._typing = null;
     this.el.choices.innerHTML = '';
     list.forEach((txt, i) => {
-      const d = document.createElement('div'); d.className = 'choice';
+      const d = document.createElement('div'); d.className = 'choice' + (disabled[i] ? ' disabled' : '');
       d.innerHTML = `<span class="key">${i + 1}</span><span></span>`;
       d.lastChild.textContent = txt; this.el.choices.appendChild(d);
     });
@@ -149,8 +159,14 @@ class UIManager {
     this.el.invMoney.textContent = `Dinero: $${inv.money.toFixed(2)}${ups}`;
     this.el.invList.innerHTML = '';
     const entries = [...inv.items.entries()].filter(([, n]) => n > 0);
+    this.inventoryUsable = [];
     if (!entries.length) { this.el.invList.innerHTML = '<div class="item"><span class="ds">Las alforjas están vacías.</span></div>'; return; }
-    entries.forEach(([id, n]) => this.el.invList.appendChild(this._itemRow(this.story.items[id] || { name: id, icon: '•', desc: '' }, `×${n}`)));
+    entries.forEach(([id, n]) => {
+      const def = this.story.items[id] || { name: id, icon: '•', desc: '' };
+      let right = `×${n}`;
+      if (def.use && this.inventoryUsable.length < 9) { this.inventoryUsable.push(id); right = `×${n}  ·  [${this.inventoryUsable.length}] usar`; }
+      this.el.invList.appendChild(this._itemRow(def, right));
+    });
   }
   _itemRow(def, right, button) {
     const d = document.createElement('div'); d.className = 'item';
@@ -187,6 +203,63 @@ class UIManager {
       this._button(it.owned ? 'Comprado' : 'Comprar', 'buy', it.id, it.owned || !it.affordable))));
   }
 
+  /* ---------- Fase 3: honor, se busca, frases, tablón ---------- */
+  setHonor(ratio, tierName) {
+    this._set('honorMark', ratio.toFixed(3), () => { this.el.honorMark.style.left = `${(ratio * 100).toFixed(1)}%`; });
+    this._set('honorTier', tierName, () => { this.el.honorTier.textContent = tierName; });
+  }
+  honorDelta(text, up) {
+    const d = this.el.honorDelta; d.textContent = text; d.className = `show ${up ? 'up' : 'down'}`;
+    clearTimeout(this._honorTimer); this._honorTimer = setTimeout(() => { d.className = up ? 'up' : 'down'; }, 2200);
+  }
+  setWanted(level, bounty) {
+    this._set('wanted', `${level}|${bounty}`, () => {
+      this.el.wanted.classList.toggle('show', level > 0);
+      this.el.wantedStars.textContent = '★'.repeat(level) + '☆'.repeat(Math.max(0, 3 - level));
+      this.el.wantedText.textContent = `SE BUSCA · $${bounty}`;
+    });
+  }
+  bark(who, text) {
+    this.el.barkWho.textContent = who ? `${who}:` : ''; this.el.barkTxt.textContent = `«${text}»`;
+    this.el.bark.classList.add('show');
+    clearTimeout(this._barkTimer); this._barkTimer = setTimeout(() => this.el.bark.classList.remove('show'), 3300);
+  }
+  setQuick(text) { this._set('quick', text || '', () => { this.el.quick.textContent = text || ''; this.el.quick.classList.toggle('show', !!text); }); }
+  setLowHealth(on) { this._set('lowhp', on, (v) => document.body.classList.toggle('lowhp', v)); }
+  // angle: ángulo (rad, sentido horario desde "arriba") de donde vino el disparo respecto a la cámara
+  hitDirection(angle) {
+    const h = this.el.hitDir; h.style.transform = `rotate(${angle}rad)`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
+  }
+  showBoard(view, handler) {
+    this._boardHandler = handler;
+    this.closeInventory(); this.hidePrompt();
+    this.el.board.classList.add('open'); document.body.classList.add('shopping');
+    this.renderBoard(view);
+  }
+  hideBoard() { this.el.board.classList.remove('open'); document.body.classList.remove('shopping'); this._boardHandler = null; }
+  renderBoard(v) {
+    const b = this.el.board;
+    b.querySelector('.shop-title').textContent = v.title; b.querySelector('.board-sub').textContent = v.subtitle;
+    b.querySelector('.board-info').textContent = `Tu dinero: $${v.money.toFixed(2)} · Reputación: ${v.honor}` + (v.wanted > 0 ? ` · SE BUSCA: $${v.wanted}` : '');
+    const payBtn = b.querySelector('[data-action="pay"]'); payBtn.textContent = v.canPay ? `Pagar mi recompensa ($${v.wanted})` : 'Sin cargos pendientes'; payBtn.disabled = !v.canPay;
+    const list = b.querySelector('.board-list'); list.innerHTML = '';
+    v.contracts.forEach((c) => {
+      const d = document.createElement('div'); d.className = 'contract' + (c.state === 'completed' ? ' done' : '');
+      d.innerHTML = '<div class="tx"><div class="nm"></div><div class="tg"></div><div class="ds"></div><div class="rw"></div></div><div class="btns"></div>';
+      d.querySelector('.nm').textContent = c.title; d.querySelector('.tg').textContent = `Objetivo: ${c.target}`; d.querySelector('.ds').textContent = c.desc;
+      const rw = c.reward.alive ? `Recompensa: $${c.reward.alive.toFixed(2)} vivo · $${c.reward.dead.toFixed(2)} muerto` : `Recompensa: $${c.reward.dead.toFixed(2)}`;
+      const st = c.state === 'completed' ? ' · COBRADO' : c.state === 'active' ? ' · EN CURSO' : c.state === 'ready' ? ' · LISTO PARA COBRAR' : '';
+      d.querySelector('.rw').textContent = rw + (c.type === 'cleanup' && c.state !== 'available' && c.state !== 'completed' ? ` · ${Math.min(c.progress, c.count)}/${c.count}` : '') + st;
+      const btns = d.querySelector('.btns');
+      if (c.state === 'available') btns.appendChild(this._button('Aceptar contrato', 'accept', c.id, c.busy));
+      if (c.state === 'active' || c.state === 'ready') btns.appendChild(this._button('Abandonar', 'abandon', c.id, false));
+      if (c.canClaimAlive) btns.appendChild(this._button(`Entregar vivo ($${c.reward.alive.toFixed(2)})`, 'claimAlive', c.id, false));
+      if (c.state === 'ready') btns.appendChild(this._button(c.type === 'leader' ? `Entregar prueba ($${c.reward.dead.toFixed(2)})` : `Cobrar ($${c.reward.dead.toFixed(2)})`, 'claimDead', c.id, !c.canClaimDead));
+      list.appendChild(d);
+    });
+  }
+
   setFps(text) { this.el.fps.textContent = text; }
   update(dt) {
     if (this._typing && this._typing.shown < this._typing.text.length) {
@@ -214,10 +287,13 @@ class UIManager {
     ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
     ctx.strokeStyle = 'rgba(216,180,106,0.18)'; ctx.lineWidth = 1;
     [R * 0.33, R * 0.66].forEach((r) => { ctx.beginPath(); ctx.arc(C, C, r, 0, Math.PI * 2); ctx.stroke(); });
-    if (info.road) {
-      ctx.strokeStyle = 'rgba(200,160,110,0.55)'; ctx.lineWidth = 3; ctx.beginPath();
-      info.road.forEach(([x, z], i) => { const [a, b] = proj(x, z, false); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
-      ctx.stroke();
+    if (info.roads) {
+      ctx.strokeStyle = 'rgba(200,160,110,0.55)'; ctx.lineWidth = 3;
+      info.roads.forEach((road) => {
+        ctx.beginPath();
+        road.forEach(([x, z], i) => { const [a, b] = proj(x, z, false); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+        ctx.stroke();
+      });
     }
     info.zones.forEach((z) => {
       const [x, y] = proj(z.x, z.z, false);
@@ -243,6 +319,16 @@ class UIManager {
         case 'deer': ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill(); break;
         case 'wolf': ctx.fillStyle = '#ff6a4a'; ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x + 4, y + 3); ctx.lineTo(x - 4, y + 3); ctx.closePath(); ctx.fill(); break;
         case 'carcass': ctx.fillStyle = '#ff5a3c'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); break;
+        case 'town':
+          ctx.fillStyle = '#f0c860'; ctx.beginPath(); ctx.moveTo(x - 7, y + 5); ctx.lineTo(x - 7, y - 1); ctx.lineTo(x, y - 7); ctx.lineTo(x + 7, y - 1); ctx.lineTo(x + 7, y + 5); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#1a1209'; ctx.fillRect(x - 1.5, y + 0.5, 3, 4.5); break;
+        case 'bandit': ctx.fillStyle = '#e03a2a'; ctx.beginPath(); ctx.arc(x, y, 3.4, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke(); break;
+        case 'banditCamp':
+          ctx.fillStyle = '#c0301f'; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y + 5); ctx.lineTo(x - 6, y + 5); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 8px Georgia'; ctx.fillText('☠', x, y + 2); break;
+        case 'law': ctx.fillStyle = '#6aa8ff'; ctx.beginPath(); ctx.arc(x, y, 3.6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); break;
+        case 'event': ctx.fillStyle = '#ffd860'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1a1209'; ctx.font = 'bold 11px Georgia'; ctx.fillText('?', x, y + 0.5); break;
+        case 'board': ctx.fillStyle = '#d8c496'; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.fillStyle = '#7a1810'; ctx.font = 'bold 8px Georgia'; ctx.fillText('$', x, y + 0.5); break;
         default: break;
       }
     }

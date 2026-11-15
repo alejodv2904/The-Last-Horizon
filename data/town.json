@@ -1,0 +1,73 @@
+{
+  "name": "Redwood Gulch",
+  "honor": {
+    "tiers": [
+      { "id": "outlaw", "name": "Forajido", "max": -50 },
+      { "id": "shady", "name": "De mala fama", "max": -15 },
+      { "id": "neutral", "name": "Forastero", "max": 15 },
+      { "id": "good", "name": "Respetado", "max": 50 },
+      { "id": "honorable", "name": "Honorable", "max": 100 }
+    ],
+    "discount": { "outlaw": -0.2, "shady": -0.08, "neutral": 0, "good": 0.06, "honorable": 0.12 },
+    "deeds": {
+      "greet": 0.8,
+      "banditKilled": 0.3,
+      "bountyLive": 6,
+      "bountyDead": 3,
+      "rescue": 6,
+      "ambushSurvived": 1.5
+    }
+  },
+  "crimes": {
+    "killCitizen": { "bounty": 70, "honor": -18, "label": "Asesinato" },
+    "killLaw": { "bounty": 220, "honor": -25, "label": "Matar a un agente de la ley" },
+    "shootLaw": { "bounty": 90, "honor": -8, "label": "Agresión a la autoridad" },
+    "robbery": { "bounty": 30, "honor": -12, "label": "Robo" },
+    "lootBody": { "bounty": 20, "honor": -8, "label": "Saqueo de un cadáver" },
+    "disturb": { "bounty": 6, "honor": 0, "label": "Disparos en el pueblo" },
+    "threaten": { "bounty": 10, "honor": -1, "label": "Amenazar con un arma" },
+    "executeCaptive": { "bounty": 0, "honor": -10, "label": "Ejecutar a un prisionero" }
+  },
+  "levels": [1, 30, 100],
+  "greetings": {
+    "outlaw": ["Ni se le ocurra acercarse.", "Sé quién es usted… Aléjese.", "Dios mío, otro forajido."],
+    "shady": ["Hmm. Buenas… supongo.", "Circula, forastero.", "No queremos problemas aquí."],
+    "neutral": ["Buenas tardes, forastero.", "Buen día. ¿Viene por el tablón?", "Cuidado con el polvo del camino."],
+    "good": ["¡Buenas, amigo! Se oye hablar bien de usted.", "Qué gusto verlo por Redwood Gulch.", "Que Dios lo acompañe, forastero."],
+    "honorable": ["¡Es un honor, señor Harlan!", "Aquí siempre tendrá las puertas abiertas.", "Dicen que usted es de los pocos hombres de palabra."]
+  },
+  "replies": {
+    "outlaw": ["…", "¿Qué quiere ahora?"],
+    "shady": ["Sí, sí. Buenas.", "Bueno… gracias."],
+    "neutral": ["Igualmente, forastero.", "Muy amable."],
+    "good": ["¡Faltaría más!", "Encantado, amigo."],
+    "honorable": ["¡Igualmente, señor! Que le vaya muy bien.", "Gracias por todo lo que hace por este pueblo."]
+  },
+  "alarm": ["¡No dispare, por favor!", "¡Baje esa arma!", "¡Que alguien llame al sheriff!", "Tranquilo, tranquilo…"],
+  "flee": ["¡Tiroteo!", "¡Corran!", "¡A cubierto!", "¡Se ha vuelto loco!"],
+  "wanted": ["¡Es el que busca el sheriff!", "¡Allí está el forajido!", "¡Alguien que avise a la ley!"],
+  "witness": ["¡Asesino!", "¡Lo vi todo!", "¡Que traigan al sheriff!"],
+  "law": {
+    "arrest": ["¡Alto en nombre de la ley! Entréguese.", "¡Quieto ahí! Baje el arma y no habrá problemas.", "¡Está arrestado, forastero!"],
+    "warn": ["¡Guarde esa arma, forastero!", "En este pueblo no se desenfunda.", "¡Última advertencia!"],
+    "lethal": ["¡Disparen a ese hombre!", "¡Ha matado a uno de los nuestros!", "¡No le dejen escapar!"],
+    "arrested": "Pasas la noche en el calabozo",
+    "released": "Te sueltan al amanecer. El sheriff te vigila."
+  },
+  "bandit": {
+    "alert": ["¡Ahí está!", "¡Un intruso, muchachos!", "¡Dispárenle!", "¡Es el cazarrecompensas!", "¡A las armas!"],
+    "hurt": ["¡Maldita sea!", "¡Me dio!", "¡Aaargh!"],
+    "flee": ["¡Me largo de aquí!", "¡Esto no vale la pena!"],
+    "surrender": ["¡Me rindo! ¡No dispare!"],
+    "holdup": ["¡La bolsa o la vida, viejo!", "¡Suelta el dinero!"]
+  },
+  "citizens": [
+    { "id": "c_ezequiel", "name": "Ezequiel Moore", "palette": "townA", "mode": "pingpong", "path": [[-21, -6.8], [-11.5, -6.8]] },
+    { "id": "c_martha", "name": "Martha Cole", "palette": "woman1", "mode": "pingpong", "path": [[-2.5, 5.7], [15, 5.7]] },
+    { "id": "c_pym", "name": "Dr. Alfred Pym", "palette": "townB", "mode": "loop", "path": [[10, 2.4], [10, -2.4], [-8, -2.4], [-8, 2.4]] },
+    { "id": "c_luz", "name": "Luz Herrera", "palette": "woman2", "mode": "pingpong", "path": [[-27, 5.2], [-19.5, 5.2]] },
+    { "id": "c_walt", "name": "Walt Dunmore", "palette": "miner", "mode": "stand", "path": [[-13.5, -3.2]], "face": [-12.2, -3.2], "bold": true },
+    { "id": "c_billy", "name": "Billy Tate", "palette": "townA", "mode": "stand", "path": [[-12.2, -3.2]], "face": [-13.5, -3.2] },
+    { "id": "c_abigail", "name": "Abigail Ross", "palette": "woman1", "mode": "loop", "path": [[6.2, -2.4], [6.2, 2.6], [0, 2.6], [0, -2.4]] }
+  ]
+}

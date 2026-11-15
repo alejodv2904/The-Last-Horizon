@@ -14,11 +14,16 @@ class WorldGen {
     this.half = CONFIG.WORLD_HALF;
     this.tiles = new Map();
     this._lastKey = null; this._lastTile = null;
-    this.road = CONFIG.ROAD;
+    this.roads = [CONFIG.ROAD, CONFIG.ROAD_TOWN];
     this.flatZones = [
       { x: CONFIG.CAMP.x, z: CONFIG.CAMP.z, r0: 13, r1: 30, h: 0 },
       { x: CONFIG.TRADING_POST.x, z: CONFIG.TRADING_POST.z, r0: 12, r1: 28, h: 0 },
+      { x: CONFIG.TOWN.x, z: CONFIG.TOWN.z, r0: 36, r1: 62, h: 0 },
+      ...CONFIG.BANDIT_CAMPS.filter((c) => c.flat).map((c) => ({ x: c.x, z: c.z, r0: 14, r1: 30, h: 0 })),
     ];
+    const C = CONFIG.CANYON, xs = C.path.map((p) => p[0]), zs = C.path.map((p) => p[1]), m = C.width * 2.8;
+    this.canyonBox = { x0: Math.min(...xs) - m, x1: Math.max(...xs) + m, z0: Math.min(...zs) - m, z1: Math.max(...zs) + m };
+    this._cs = { d: 0, u: 0 };
     this.flatZones.forEach((f) => { f.h = this._smoothHeight(f.x, f.z) + this.noise.fbm(f.x * 0.03 + 100, f.z * 0.03 - 50, 2) * 1.6; });
   }
 
@@ -30,6 +35,7 @@ class WorldGen {
     w *= smoothstep(45, 130, dc);
     const dt = Math.hypot(x - CONFIG.TRADING_POST.x, z - CONFIG.TRADING_POST.z);
     w *= smoothstep(22, 45, dt);
+    for (const zn of CONFIG.CLEAR_ZONES) w *= smoothstep(zn.r * 0.5, zn.r * 1.15, Math.hypot(x - zn.x, z - zn.z));
     return w;
   }
 
@@ -53,20 +59,44 @@ class WorldGen {
   }
   roadDistance(x, z) {
     let best = Infinity;
-    const r = this.road;
-    for (let i = 0; i < r.length - 1; i++) {
-      const ax = r[i][0], az = r[i][1], bx = r[i + 1][0], bz = r[i + 1][1];
-      const vx = bx - ax, vz = bz - az, wx = x - ax, wz = z - az;
-      const t = clamp((wx * vx + wz * vz) / (vx * vx + vz * vz), 0, 1);
-      const d = Math.hypot(wx - vx * t, wz - vz * t);
-      if (d < best) best = d;
+    for (const r of this.roads) {
+      for (let i = 0; i < r.length - 1; i++) {
+        const ax = r[i][0], az = r[i][1], bx = r[i + 1][0], bz = r[i + 1][1];
+        const vx = bx - ax, vz = bz - az, wx = x - ax, wz = z - az;
+        const t = clamp((wx * vx + wz * vz) / (vx * vx + vz * vz), 0, 1);
+        const d = Math.hypot(wx - vx * t, wz - vz * t);
+        if (d < best) best = d;
+      }
     }
     return best;
+  }
+  // Distancia (d) al eje del cañón y distancia recorrida (u) hasta la proyección: u sirve para la rampa de entrada.
+  canyonSample(x, z) {
+    const p = CONFIG.CANYON.path;
+    let best = Infinity, bu = 0, acc = 0;
+    for (let i = 0; i < p.length - 1; i++) {
+      const ax = p[i][0], az = p[i][1], vx = p[i + 1][0] - ax, vz = p[i + 1][1] - az, L2 = vx * vx + vz * vz;
+      const wx = x - ax, wz = z - az, t = clamp((wx * vx + wz * vz) / L2, 0, 1);
+      const d = Math.hypot(wx - vx * t, wz - vz * t);
+      if (d < best) { best = d; bu = acc + t * Math.sqrt(L2); }
+      acc += Math.sqrt(L2);
+    }
+    this._cs.d = best; this._cs.u = bu;
+    return this._cs;
   }
   heightFn(x, z) {
     let h = this._rawHeight(x, z);
     const rd = this.roadDistance(x, z);
     if (rd < 10) h = lerp(h, this._smoothHeight(x, z) + 0.6, smoothstep(10, 3, rd) * 0.8);
+    const B = this.canyonBox;
+    if (x > B.x0 && x < B.x1 && z > B.z0 && z < B.z1) {
+      const C = CONFIG.CANYON, W = C.width, s = this.canyonSample(x, z);
+      const w = 1 - smoothstep(W * 1.7, W * 2.7, s.d);
+      if (w > 0) {
+        const base = this._smoothHeight(x, z), t = smoothstep(W * 0.45, W * 0.82, s.d);
+        h = lerp(h, lerp(base - C.depth, base + C.rim, t), w * smoothstep(0, C.ramp, s.u));
+      }
+    }
     for (const f of this.flatZones) {
       const d = Math.hypot(x - f.x, z - f.z);
       if (d < f.r1) h = lerp(f.h, h, smoothstep(f.r0, f.r1, d));

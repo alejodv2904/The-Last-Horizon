@@ -1,0 +1,16 @@
+{
+  "npc": "hattie",
+  "title": "Tienda General de Hattie Bell",
+  "greeting": "De todo un poco, y a buen precio. ¿Qué se le ofrece?",
+  "sell": [
+    { "id": "venison", "price": 1.4 },
+    { "id": "deer_pelt", "price": 3.9 },
+    { "id": "wolf_pelt", "price": 5.8 }
+  ],
+  "buy": [
+    { "id": "ammo_box", "name": "Caja de cartuchos .44", "desc": "12 cartuchos para el rifle de palanca.", "icon": "🔸", "price": 3.2, "give": { "ammo": 12 } },
+    { "id": "tonic_1", "name": "Tónico curativo", "desc": "Restablece 40 de salud. Se usa desde las alforjas (Tab) o con [Q].", "icon": "🧪", "price": 2.5, "give": { "tonic": 1 } },
+    { "id": "tonic_3", "name": "Pack de 3 tónicos", "desc": "Tres frascos con un pequeño descuento.", "icon": "🧪", "price": 6.5, "give": { "tonic": 3 } },
+    { "id": "tonic_strong", "name": "Tónico fuerte", "desc": "Restablece 85 de salud de golpe.", "icon": "💉", "price": 6.0, "give": { "tonic_strong": 1 } }
+  ]
+}

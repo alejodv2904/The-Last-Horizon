@@ -13,6 +13,30 @@
     "pike": {
       "name": "Jonás Pike",
       "role": "Trampero y comerciante"
+    },
+    "hattie": {
+      "name": "Hattie Bell",
+      "role": "Tendera"
+    },
+    "sheriff": {
+      "name": "Sheriff Amos Reed",
+      "role": "La ley de Redwood Gulch"
+    },
+    "tomas": {
+      "name": "Tomás Briggs",
+      "role": "Fugitivo"
+    },
+    "clara": {
+      "name": "Clara Whitfield",
+      "role": "Viuda"
+    },
+    "pruitt": {
+      "name": "Mr. Pruitt",
+      "role": "Cobrador del banco"
+    },
+    "sal": {
+      "name": "Sal Moreno",
+      "role": "Cantinero"
     }
   },
   "intro": {
@@ -48,6 +72,27 @@
       "name": "Piel de lobo",
       "icon": "🐺",
       "desc": "Gruesa y gris. Pike paga bien por ellas."
+    },
+    "tonic": {
+      "name": "Tónico curativo",
+      "icon": "🧪",
+      "desc": "Restablece 40 de salud.",
+      "use": {
+        "heal": 40
+      }
+    },
+    "tonic_strong": {
+      "name": "Tónico fuerte",
+      "icon": "💉",
+      "desc": "Restablece 85 de salud de golpe.",
+      "use": {
+        "heal": 85
+      }
+    },
+    "proof_boone": {
+      "name": "Pañuelo de «Dos Dedos»",
+      "icon": "🧣",
+      "desc": "Prueba de que Boone Hargrove ya no es un problema. Entrégala en el tablón."
     }
   },
   "missions": {
@@ -93,6 +138,108 @@
             "text": "Silas tiene algo que contarte sobre los Hargrove"
           }
         ]
+      }
+    },
+    "s01_fugitive": {
+      "title": "El fugitivo del establo",
+      "giver": "hattie",
+      "side": true,
+      "objectives": [
+        {
+          "id": "find",
+          "type": "talk",
+          "npc": "tomas",
+          "text": "Encuentra a Tomás Briggs, al fondo del establo"
+        }
+      ],
+      "rewards": {
+        "money": 0
+      },
+      "completeTitle": "MISIÓN COMPLETADA",
+      "completeSubtitle": "El fugitivo del establo",
+      "endings": {
+        "paid": {
+          "subtitle": "Pagaste su deuda",
+          "rewards": {
+            "honor": 12,
+            "flags": [
+              "tomas_paid"
+            ]
+          }
+        },
+        "freed": {
+          "subtitle": "Lo dejaste escapar",
+          "rewards": {
+            "honor": 5,
+            "flags": [
+              "tomas_freed"
+            ]
+          }
+        },
+        "turned": {
+          "subtitle": "Entregaste al fugitivo",
+          "rewards": {
+            "money": 10,
+            "honor": -6,
+            "flags": [
+              "tomas_turned"
+            ]
+          }
+        }
+      }
+    },
+    "s02_debt": {
+      "title": "La deuda de Clara",
+      "giver": "clara",
+      "side": true,
+      "objectives": [
+        {
+          "id": "talk",
+          "type": "talk",
+          "npc": "pruitt",
+          "text": "Habla con el cobrador Pruitt, en el porche del saloon"
+        }
+      ],
+      "rewards": {
+        "money": 0
+      },
+      "completeTitle": "MISIÓN COMPLETADA",
+      "completeSubtitle": "La deuda de Clara",
+      "endings": {
+        "paid": {
+          "subtitle": "Saldaste la deuda de la viuda",
+          "rewards": {
+            "honor": 10,
+            "items": {
+              "tonic": 2
+            },
+            "flags": [
+              "pruitt_paid"
+            ]
+          }
+        },
+        "scared": {
+          "subtitle": "Echaste a Pruitt del pueblo",
+          "rewards": {
+            "honor": 3,
+            "items": {
+              "tonic": 1
+            },
+            "flags": [
+              "pruitt_scared"
+            ]
+          }
+        },
+        "bribed": {
+          "subtitle": "Te llevaste tu parte",
+          "rewards": {
+            "money": 20,
+            "honor": -15,
+            "flags": [
+              "pruitt_bribed"
+            ]
+          }
+        }
       }
     }
   },
@@ -204,6 +351,740 @@
                 "text": "Los estómagos no esperan, muchacho. Aquí estaré."
               }
             ]
+          }
+        ]
+      }
+    ],
+    "hattie": [
+      {
+        "when": {
+          "flag": "tomas_turned"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Gracias por llevarle el muchacho al sheriff. Se hace justicia… aunque se me encoge el corazón al pensar en la hermanita."
+          },
+          {
+            "speaker": "npc",
+            "text": "¿Necesita algo para el camino?"
+          }
+        ],
+        "choices": [
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, gracias.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Que Dios lo guíe, forastero."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "when": {
+          "flag": "tomas_freed"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Me contaron que dejó escapar al ladrón. Bueno… Walter, mi marido, también perdonaba demasiado."
+          },
+          {
+            "speaker": "npc",
+            "text": "Dios quiera que el muchacho se enmiende. ¿Qué se le ofrece?"
+          }
+        ],
+        "choices": [
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, gracias.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Vuelva cuando quiera."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "when": {
+          "flag": "tomas_paid"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¿Pagó de su bolsillo la harina del chico? Quedan pocos hombres así, señor Harlan."
+          },
+          {
+            "speaker": "npc",
+            "text": "Para usted, siempre habrá buen precio en esta tienda."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, gracias.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Es usted de los buenos."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "s01_fugitive",
+          "state": "ready"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¿Ya habló con él? Está al fondo del establo, entre los boxes. Es un escurridizo."
+          },
+          {
+            "speaker": "npc",
+            "text": "Mientras tanto… ¿le interesa algo de la tienda?"
+          }
+        ],
+        "choices": [
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, gracias.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Entonces, a trabajar."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "s01_fugitive",
+          "state": "available"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡Por fin alguien con un arma y cara de persona decente! Me han robado."
+          },
+          {
+            "speaker": "player",
+            "text": "Calma, señora. ¿Qué se llevaron?"
+          },
+          {
+            "speaker": "npc",
+            "text": "Un saco de harina y el revólver de mi difunto Walter. Vi correr al ladrón hacia el establo, con el saco al hombro."
+          },
+          {
+            "speaker": "npc",
+            "text": "El sheriff anda en sus asuntos. Si usted me lo trae —o me devuelve lo robado— le pagaré como Dios manda."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Yo me ocupo. Hablaré con él.",
+            "action": "accept:s01_fugitive",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "Déjemelo a mí, señora."
+              },
+              {
+                "speaker": "npc",
+                "text": "Búsquelo al fondo del establo. Y no sea blando."
+              }
+            ]
+          },
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, señora.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Los ladrones no esperan, forastero."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Bienvenido a la Tienda General. Tónicos, munición y víveres. ¿Qué se le ofrece?"
+          }
+        ],
+        "choices": [
+          {
+            "text": "Quisiera ver su mercancía.",
+            "action": "shop:hattie",
+            "reply": []
+          },
+          {
+            "text": "Ahora no, gracias.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Vuelva cuando quiera."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "sheriff": [
+      {
+        "when": {
+          "wanted": true
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Eli Harlan. Tienes cuentas pendientes con esta ley."
+          },
+          {
+            "speaker": "player",
+            "text": "Lo sé, sheriff."
+          },
+          {
+            "speaker": "npc",
+            "text": "Paga lo que debes en el tablón, o respóndeme con el cañón de mi revólver. Tú eliges."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Ver el tablón de recompensas.",
+            "action": "board",
+            "reply": []
+          },
+          {
+            "text": "Entendido.",
+            "reply": []
+          }
+        ]
+      },
+      {
+        "when": {
+          "honorTier": "outlaw"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Sé qué clase de hombre eres. Los forajidos no son bienvenidos en Redwood Gulch."
+          },
+          {
+            "speaker": "npc",
+            "text": "Mientras no desenfundes, no tendremos problemas. Pero te estaré mirando."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Ver el tablón de recompensas.",
+            "action": "board",
+            "reply": []
+          },
+          {
+            "text": "Descuide.",
+            "reply": []
+          }
+        ]
+      },
+      {
+        "when": {
+          "flag": "tomas_turned"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Gracias por traerme al muchacho Briggs. Seis meses de celda… no es tanto. Saldrá antes si se porta."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si busca trabajo honrado, mire el tablón."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Ver el tablón de recompensas.",
+            "action": "board",
+            "reply": []
+          },
+          {
+            "text": "Hasta luego, sheriff.",
+            "reply": []
+          }
+        ]
+      },
+      {
+        "when": {
+          "honorTier": "honorable"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Siempre me alegra ver a un hombre de palabra, Harlan. Este pueblo duerme más tranquilo con gente como usted."
+          },
+          {
+            "speaker": "npc",
+            "text": "Hay contratos nuevos en el tablón. Pagan bien, y la ley los respalda."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Ver el tablón de recompensas.",
+            "action": "board",
+            "reply": []
+          },
+          {
+            "text": "Gracias, sheriff.",
+            "reply": []
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Soy Amos Reed, sheriff de Redwood Gulch. Aquí la ley es simple: no desenfundes, no robes y no mates sin motivo."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si lo tuyo es el gatillo, el tablón de recompensas está al lado. Con la ley de tu parte se gana más… y se duerme mejor."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Ver el tablón de recompensas.",
+            "action": "board",
+            "reply": []
+          },
+          {
+            "text": "Gracias, sheriff.",
+            "reply": []
+          }
+        ]
+      }
+    ],
+    "tomas": [
+      {
+        "when": {
+          "flag": "tomas_turned"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Seis meses… Lucy se quedará sola. Dígale a la señora Bell que no fue mi intención asustarla."
+          },
+          {
+            "speaker": "player",
+            "text": "Cuidaré de que alguien le lleve comida a tu hermana."
+          },
+          {
+            "speaker": "npc",
+            "text": "Que Dios se lo pague…"
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "s01_fugitive",
+          "state": "ready"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡No! ¡No dispare! Por favor, señor…"
+          },
+          {
+            "speaker": "player",
+            "text": "Tranquilo, muchacho. Baja las manos. Hattie dice que le robaste harina y un revólver."
+          },
+          {
+            "speaker": "npc",
+            "text": "Es verdad… Mi hermana Lucy tiene fiebre desde el domingo. Llevamos tres días bebiendo agua con sal."
+          },
+          {
+            "speaker": "npc",
+            "text": "Dejé una nota. Iba a pagarle cuando cobrara en la mina… pero la mina cerró."
+          },
+          {
+            "speaker": "player",
+            "text": "¿Y el revólver?"
+          },
+          {
+            "speaker": "npc",
+            "text": "Lo tiré al arroyo. No quería hacerle daño a nadie. Se lo juro por mi madre."
+          },
+          {
+            "speaker": "player",
+            "text": "(El sheriff lo dejaría seis meses en esa celda. Y la niña, sola con la fiebre.)"
+          }
+        ],
+        "choices": [
+          {
+            "text": "Pagaré lo que robaste. Vuelve con tu hermana.",
+            "requires": {
+              "money": 6
+            },
+            "altReply": [
+              {
+                "speaker": "player",
+                "text": "(No llevas ni seis dólares encima.)"
+              }
+            ],
+            "action": "money:-6;complete:s01_fugitive:paid",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "Seis dólares por la harina y el susto. Llévale algo caliente a Lucy."
+              },
+              {
+                "speaker": "npc",
+                "text": "Dios se lo pague, señor… ¡Dios se lo pague!"
+              },
+              {
+                "speaker": "npc",
+                "text": "Nunca olvidaré esto. Nunca."
+              }
+            ]
+          },
+          {
+            "text": "Corre. Y que no te vea robando otra vez.",
+            "action": "complete:s01_fugitive:freed",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "Tienes hasta que cuente diez."
+              },
+              {
+                "speaker": "npc",
+                "text": "¡Gracias! ¡Gracias, señor!"
+              },
+              {
+                "speaker": "player",
+                "text": "(El muchacho sale corriendo entre los caballos. A Hattie no le va a gustar.)"
+              }
+            ]
+          },
+          {
+            "text": "Vienes conmigo. El sheriff decidirá.",
+            "action": "complete:s01_fugitive:turned",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "La ley es la ley, Tomás. Camina."
+              },
+              {
+                "speaker": "npc",
+                "text": "Lo entiendo… Cuide de Lucy, se lo suplico. Vive en la cabaña junto al arroyo."
+              },
+              {
+                "speaker": "player",
+                "text": "(Lo llevas hasta el calabozo del sheriff. No miras atrás.)"
+              }
+            ]
+          },
+          {
+            "text": "Déjame pensarlo.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Por favor… no tarde."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "No me haga daño, por favor… yo no he hecho nada."
+          },
+          {
+            "speaker": "npc",
+            "text": "Hable con la señora Bell, de la tienda, si busca algo."
+          }
+        ]
+      }
+    ],
+    "clara": [
+      {
+        "when": {
+          "flag": "pruitt_paid"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Pagó mi deuda, señor Harlan. Hay pocas personas así en este mundo."
+          },
+          {
+            "speaker": "npc",
+            "text": "Mi Henry decía que el honor no se compra, pero a veces sí se regala. Que Dios se lo devuelva."
+          }
+        ]
+      },
+      {
+        "when": {
+          "flag": "pruitt_scared"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "No sé qué le dijo a Pruitt, pero salió del pueblo sin mirar atrás."
+          },
+          {
+            "speaker": "npc",
+            "text": "No me gusta la violencia… pero le agradezco que me dejara mi casa."
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "s02_debt",
+          "state": "ready"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Pruitt está en el porche del saloon, el de traje negro. No se deje engatusar, por favor."
+          }
+        ]
+      },
+      {
+        "when": {
+          "mission": "s02_debt",
+          "state": "available"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Perdone, señor… ¿es usted el cazarrecompensas? Dicen que ayuda a la gente."
+          },
+          {
+            "speaker": "player",
+            "text": "A veces. ¿Qué ocurre, señora?"
+          },
+          {
+            "speaker": "npc",
+            "text": "Mi Henry murió en marzo. Ahora un hombre del banco, Pruitt, dice que firmó un pagaré de quince dólares. Henry no sabía escribir su nombre."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si no pago antes del domingo perderé la casa… y no tengo adónde ir."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Hablaré con ese Pruitt.",
+            "action": "accept:s02_debt",
+            "reply": [
+              {
+                "speaker": "player",
+                "text": "Vuelva a su casa, señora. Yo me encargo."
+              },
+              {
+                "speaker": "npc",
+                "text": "Que Dios lo bendiga, señor."
+              }
+            ]
+          },
+          {
+            "text": "Lo siento, no puedo.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Lo entiendo… Gracias por escucharme."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Buenas tardes, forastero. Que el Señor lo acompañe por el camino."
+          }
+        ]
+      }
+    ],
+    "pruitt": [
+      {
+        "when": {
+          "mission": "s02_debt",
+          "state": "ready"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Ah. El nuevo mensajero de la viuda. ¿Viene a pagar o a hacerme perder la tarde?"
+          },
+          {
+            "speaker": "player",
+            "text": "Vengo por el pagaré de Henry Whitfield."
+          },
+          {
+            "speaker": "npc",
+            "text": "Quince dólares, firmado y sellado. Papeles son papeles, amigo. El banco no regala nada."
+          },
+          {
+            "speaker": "player",
+            "text": "Henry no sabía escribir."
+          },
+          {
+            "speaker": "npc",
+            "text": "Marcó con una cruz. Una cruz vale lo que cualquier firma. Pero soy un hombre razonable."
+          },
+          {
+            "speaker": "npc",
+            "text": "Páguelos usted y se acaba el asunto. O… podemos llegar a un entendimiento. Un hombre listo siempre se lleva su parte."
+          }
+        ],
+        "choices": [
+          {
+            "text": "Aquí tiene los quince dólares. Rompa ese papel.",
+            "requires": {
+              "money": 15
+            },
+            "altReply": [
+              {
+                "speaker": "player",
+                "text": "(No llevas quince dólares.)"
+              }
+            ],
+            "action": "money:-15;complete:s02_debt:paid",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Un placer hacer negocios. Aunque, entre nosotros, ese pagaré era una calamidad."
+              },
+              {
+                "speaker": "player",
+                "text": "Rómpalo. Ahora."
+              },
+              {
+                "speaker": "npc",
+                "text": "(rasga el papel con una mueca) Buenas tardes."
+              }
+            ]
+          },
+          {
+            "text": "Largo del pueblo, Pruitt, o la cuenta la hacemos con plomo.",
+            "action": "complete:s02_debt:scared",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "(palidece) No… no hace falta ponerse violento."
+              },
+              {
+                "speaker": "player",
+                "text": "Tienes hasta el atardecer."
+              },
+              {
+                "speaker": "npc",
+                "text": "¡Me voy! ¡Me voy! Esto se sabrá en el banco…"
+              }
+            ]
+          },
+          {
+            "text": "¿Qué tal si repartimos? Veinte dólares y la viuda se queda sin casa.",
+            "action": "complete:s02_debt:bribed",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Sabía que usted era un hombre práctico. Aquí los tiene."
+              },
+              {
+                "speaker": "player",
+                "text": "(Guardas los billetes. El sabor en la boca es amargo.)"
+              }
+            ]
+          },
+          {
+            "text": "Déjeme pensarlo.",
+            "reply": [
+              {
+                "speaker": "npc",
+                "text": "Piense rápido. El domingo se acerca."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Buenas tardes, forastero. Asuntos del banco… nada que pueda interesarle."
+          }
+        ]
+      }
+    ],
+    "sal": [
+      {
+        "when": {
+          "honorTier": "outlaw"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Aquí no se sirve a los de su calaña. Salga antes de que llame al sheriff."
+          }
+        ]
+      },
+      {
+        "when": {
+          "honorTier": "honorable"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡Señor Harlan! La primera ronda va por cuenta de la casa."
+          },
+          {
+            "speaker": "npc",
+            "text": "Dicen que Boone «Dos Dedos» Hargrove se esconde en el Cañón Norte, al fondo. Nadie se atreve a ir… salvo usted, quizá."
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Whisky, rumores y cama por noche. ¿Qué va a ser?"
+          },
+          {
+            "speaker": "npc",
+            "text": "Si busca trabajo: la banda de Boone «Dos Dedos» asalta caravanas desde el Cañón Norte. El sheriff paga bien por su cabeza."
           }
         ]
       }

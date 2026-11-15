@@ -10,16 +10,45 @@ const PALETTES = {
   trader: { skin: 0xc8946c, shirt: 0x8a3a2a, coat: 0x7a6248, belt: 0x2a1c12, pants: 0x4a4038, boots: 0x2a1d14,
     hat: 0x6e5a40, hatBand: 0x3a2a1a, bandana: 0xc8b48a, beard: 0x5a3a22, glove: 0x6b4a30, beardLong: true },
 };
+// Fase 3: bandidos, ley y ciudadanos. "beard: skin" quita la barba (para mujeres e imberbes).
+const P = (o) => Object.assign({ skin: 0xc58c63, shirt: 0xa0906c, coat: 0x4a3324, belt: 0x2a1c12, pants: 0x3b3a40, boots: 0x2a1d14,
+  hat: 0x3b2a1c, hatBand: 0x16100b, bandana: 0x8f2b22, beard: 0x3a2617, glove: 0x6b4a30, beardLong: false }, o);
+Object.assign(PALETTES, {
+  bandit1: P({ skin: 0xb98660, shirt: 0x6b5a46, coat: 0x3a2f27, hat: 0x2a2420, hatBand: 0x7a1f18, bandana: 0xa42a20, beard: 0x2a1c12 }),
+  bandit2: P({ skin: 0xc79a74, shirt: 0x7a6a50, coat: 0x6a5f4c, pants: 0x4a4034, hat: 0x4a3b2a, hatBand: 0x2a2018, bandana: 0x2e4a5a, beard: 0x5a3a22, beardLong: true }),
+  bandit3: P({ skin: 0xa8744f, shirt: 0x5a4a3a, coat: 0x5a2a24, pants: 0x34302c, hat: 0x1e1a18, hatBand: 0xb0a070, bandana: 0x1e1e22, beard: 0x1a1210 }),
+  leader: P({ skin: 0xb98660, shirt: 0xd8d0b8, coat: 0x1d1d22, belt: 0x120d08, pants: 0x1f1f24, boots: 0x15100c, hat: 0x1a1a1c, hatBand: 0xb8b8c0, bandana: 0xd8c9a3, beard: 0x2a2a2e, beardLong: true }),
+  sheriff: P({ skin: 0xc08a64, shirt: 0xcfc6ae, coat: 0x8a6e48, belt: 0x2a1c12, pants: 0x4a4a52, hat: 0xb0a078, hatBand: 0x4a3a22, bandana: 0x2c3c5c, beard: 0x8a8a82, beardLong: true }),
+  deputy: P({ skin: 0xc58c63, shirt: 0xb8b0a0, coat: 0x5a5a48, pants: 0x3c3c44, hat: 0x7a6a50, hatBand: 0x2a2018, bandana: 0x5a6a7a, beard: 0x4a3322 }),
+  townA: P({ skin: 0xc8946c, shirt: 0x7a8aa0, coat: 0x6a4a34, pants: 0x4a4038, hat: 0x5a4a38, hatBand: 0x2a2018, bandana: 0xb8a888, beard: 0x5a3a22 }),
+  townB: P({ skin: 0xb27a58, shirt: 0xd0c8b0, coat: 0x2a2a30, pants: 0x34343a, hat: 0x1a1a1c, hatBand: 0x3a3a40, bandana: 0x6a2a2a, beard: 0x8a8a82, beardLong: true }),
+  miner: P({ skin: 0xa8744f, shirt: 0x8a7a64, coat: 0x6a6258, pants: 0x4a4a42, hat: 0x6a5a44, hatBand: 0x3a2e22, bandana: 0x7a7a6a, beard: 0x3a2a1a, beardLong: true }),
+  woman1: P({ skin: 0xd0a07a, shirt: 0xe4dccb, coat: 0xb88a9a, belt: 0x6a3a4a, pants: 0x6a3a4a, hat: 0xe8dcc8, hatBand: 0x9a5a6a, bandana: 0xe4dccb, beard: 0xd0a07a, glove: 0xd0a07a }),
+  woman2: P({ skin: 0xb88866, shirt: 0xe4dccb, coat: 0x4a6a8a, belt: 0x2a3a4a, pants: 0x2a3a4a, hat: 0x5a4a6a, hatBand: 0xd0c8b0, bandana: 0xe4dccb, beard: 0xb88866, glove: 0xb88866 }),
+  storekeeper: P({ skin: 0xc8946c, shirt: 0xe4dccb, coat: 0x5a7a4a, belt: 0x3a2a1a, pants: 0x4a3a2a, hat: 0xd8cfa8, hatBand: 0x5a7a4a, bandana: 0xe4dccb, beard: 0xc8946c, glove: 0xc8946c }),
+  barkeep: P({ skin: 0xc58c63, shirt: 0xf0e8d8, coat: 0x2a2428, pants: 0x2a2a30, hat: 0x1c1c20, hatBand: 0x1c1c20, bandana: 0xa02a2a, beard: 0x2a1c12 }),
+  pruitt: P({ skin: 0xd0a07a, shirt: 0xf0e8d8, coat: 0x16161a, belt: 0x16161a, pants: 0x1c1c22, boots: 0x101010, hat: 0x101012, hatBand: 0x303038, bandana: 0x8a1a1a, beard: 0x6a6a6a }),
+  tomas: P({ skin: 0xb27a58, shirt: 0xa89878, coat: 0x6a5a48, pants: 0x4a4238, hat: 0x7a6a50, hatBand: 0x4a3a2a, bandana: 0xa89878, beard: 0xb27a58 }),
+  clara: P({ skin: 0xd0a07a, shirt: 0xd8d0c0, coat: 0x2a2a32, belt: 0x1a1a20, pants: 0x1a1a20, hat: 0x1c1c22, hatBand: 0x1c1c22, bandana: 0xd8d0c0, beard: 0xd0a07a, glove: 0xd0a07a }),
+  traveler: P({ skin: 0xc8946c, shirt: 0xc8b890, coat: 0x4a6a5a, pants: 0x5a4a3a, hat: 0x8a7a5a, hatBand: 0x3a2a1a, bandana: 0xb8a888, beard: 0x7a5a3a }),
+});
 const WOOD = 0x6e4526, METAL = 0x2c2c30;
 const RIFLE_BACK_POS = new THREE.Vector3(0.03, 0.3, -0.18);
 const RIFLE_BACK_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0.55, 'ZXY'));
 const RIFLE_AIM_POS = new THREE.Vector3(-0.1, 0.5, 0.16);
 const RIFLE_AIM_Q = new THREE.Quaternion();
 
-function buildHumanoid(p, withRifle) {
+// opts.lite: versión de 6 mallas (ciudadanos). opts.shadow: 'all' | 'body' (solo el torso proyecta sombra).
+// Menos mallas = menos draw calls (y menos pasadas de sombra) cuando hay mucha gente en pantalla.
+function buildHumanoid(p, withRifle, opts = {}) {
   const mat = MAT.vcDouble;
   const meshes = [];
-  const mk = (geo, parent) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); meshes.push(m); return m; };
+  const lite = !!opts.lite, bodyShadowOnly = lite || opts.shadow === 'body';
+  let first = true;
+  const mk = (geo, parent) => {
+    const m = new THREE.Mesh(geo, mat); m.castShadow = !bodyShadowOnly || first; first = false;
+    parent.add(m); meshes.push(m); return m;
+  };
   const root = new THREE.Group();
   const hips = new THREE.Group(); hips.position.y = 0.98; root.add(hips);
   const torso = new THREE.Group(); hips.add(torso);
@@ -51,8 +80,17 @@ function buildHumanoid(p, withRifle) {
 
   const makeArm = (side) => {
     const arm = new THREE.Group(); arm.position.set(0.27 * side, 0.56, 0); torso.add(arm);
-    mk(new GeoBuilder().add(new THREE.BoxGeometry(0.12, 0.34, 0.13), p.coat, 0, -0.16, 0).build(), arm);
     const fore = new THREE.Group(); fore.position.y = -0.32; arm.add(fore);
+    if (lite) {   // brazo y antebrazo en una sola malla (sin codo articulado)
+      mk(new GeoBuilder()
+        .add(new THREE.BoxGeometry(0.12, 0.34, 0.13), p.coat, 0, -0.16, 0)
+        .add(new THREE.BoxGeometry(0.11, 0.28, 0.12), p.coat, 0, -0.45, 0)
+        .add(new THREE.BoxGeometry(0.115, 0.05, 0.125), p.shirt, 0, -0.59, 0)
+        .add(new THREE.BoxGeometry(0.085, 0.1, 0.1), p.glove, 0, -0.66, 0.01)
+        .build(), arm);
+      return [arm, fore];
+    }
+    mk(new GeoBuilder().add(new THREE.BoxGeometry(0.12, 0.34, 0.13), p.coat, 0, -0.16, 0).build(), arm);
     mk(new GeoBuilder()
       .add(new THREE.BoxGeometry(0.11, 0.28, 0.12), p.coat, 0, -0.13, 0)
       .add(new THREE.BoxGeometry(0.115, 0.05, 0.125), p.shirt, 0, -0.27, 0)
@@ -65,8 +103,17 @@ function buildHumanoid(p, withRifle) {
 
   const makeLeg = (side) => {
     const leg = new THREE.Group(); leg.position.set(0.11 * side, 0, 0); hips.add(leg);
-    mk(new GeoBuilder().add(new THREE.BoxGeometry(0.15, 0.48, 0.17), p.pants, 0, -0.24, 0).build(), leg);
     const shin = new THREE.Group(); shin.position.y = -0.48; leg.add(shin);
+    if (lite) {   // pierna entera en una malla (el balanceo sale de la cadera)
+      mk(new GeoBuilder()
+        .add(new THREE.BoxGeometry(0.15, 0.48, 0.17), p.pants, 0, -0.24, 0)
+        .add(new THREE.BoxGeometry(0.135, 0.3, 0.15), p.pants, 0, -0.63, 0)
+        .add(new THREE.BoxGeometry(0.15, 0.24, 0.17), p.boots, 0, -0.84, 0)
+        .add(new THREE.BoxGeometry(0.14, 0.08, 0.13), p.boots, 0, -0.94, 0.1)
+        .build(), leg);
+      return [leg, shin];
+    }
+    mk(new GeoBuilder().add(new THREE.BoxGeometry(0.15, 0.48, 0.17), p.pants, 0, -0.24, 0).build(), leg);
     mk(new GeoBuilder()
       .add(new THREE.BoxGeometry(0.135, 0.3, 0.15), p.pants, 0, -0.15, 0)
       .add(new THREE.BoxGeometry(0.15, 0.24, 0.17), p.boots, 0, -0.36, 0)
@@ -140,6 +187,24 @@ function poseHumanoid(h, s) {
     aRx = lerp(aRx, -0.9 + saw, crouch); fR = lerp(fR, -0.6, crouch);
     aLx = lerp(aLx, -0.7, crouch); fL = lerp(fL, -0.5, crouch);
   }
+  // --- Fase 3 ---
+  const hunker = s.hunker || 0, hands = s.hands || 0, bound = s.bound || 0;
+  if (hunker > 0) {   // agachado tras una cobertura, fusil cruzado sobre el pecho
+    hipY = lerp(hipY, 0.62, hunker);
+    lL = lerp(lL, -0.95, hunker); sL = lerp(sL, 1.6, hunker);
+    lR = lerp(lR, -0.75, hunker); sR = lerp(sR, 1.4, hunker);
+    torsoX = lerp(torsoX, 0.3, hunker);
+    aLx = lerp(aLx, -0.9, hunker); fL = lerp(fL, -1.1, hunker); aRx = lerp(aRx, -0.8, hunker); fR = lerp(fR, -1.2, hunker);
+  }
+  if (bound > 0) {    // muñecas atadas al frente
+    aLx = lerp(aLx, -0.75, bound); aLz = lerp(aLz, -0.12, bound); fL = lerp(fL, -1.2, bound);
+    aRx = lerp(aRx, -0.75, bound); aRz = lerp(aRz, 0.12, bound); fR = lerp(fR, -1.2, bound);
+    torsoX = lerp(torsoX, 0.12, bound);
+  }
+  if (hands > 0) {    // manos arriba (rendición, miedo)
+    aLx = lerp(aLx, -2.85, hands); aLz = lerp(aLz, -0.25, hands); fL = lerp(fL, -0.3, hands);
+    aRx = lerp(aRx, -2.85, hands); aRz = lerp(aRz, 0.25, hands); fR = lerp(fR, -0.3, hands);
+  }
   h.hips.position.y = hipY;
   h.torso.rotation.x = torsoX;
   h.legL.rotation.set(lL, 0, 0.42 * ride); h.legR.rotation.set(lR, 0, -0.42 * ride);
@@ -149,8 +214,9 @@ function poseHumanoid(h, s) {
   h.head.rotation.y = s.headYaw || 0;
   h.head.rotation.x = aim > 0 ? lerp(0, pitch * -0.1, aim) : (s.headPitch || 0);
   if (h.rifle) {
-    h.rifle.position.lerpVectors(RIFLE_BACK_POS, RIFLE_AIM_POS, aim);
-    h.rifle.quaternion.slerpQuaternions(RIFLE_BACK_Q, RIFLE_AIM_Q, aim);
+    const ra = s.rifleAim ?? aim;
+    h.rifle.position.lerpVectors(RIFLE_BACK_POS, RIFLE_AIM_POS, ra);
+    h.rifle.quaternion.slerpQuaternions(RIFLE_BACK_Q, RIFLE_AIM_Q, ra);
   }
 }
 

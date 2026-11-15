@@ -156,7 +156,9 @@ class ChunkManager {
     out.lerp(GROUND.rock, smoothstep(0.88, 0.7, ny));
     out.lerp(GROUND.road, smoothstep(3.6, 1.8, g.roadDistance(x, z)) * 0.95);
     const dc = Math.hypot(x - CONFIG.CAMP.x, z - CONFIG.CAMP.z), dt = Math.hypot(x - CONFIG.TRADING_POST.x, z - CONFIG.TRADING_POST.z);
-    out.lerp(GROUND.dirt, Math.max(smoothstep(17, 8, dc), smoothstep(15, 7, dt)) * 0.9);
+    let dirt = Math.max(smoothstep(17, 8, dc), smoothstep(15, 7, dt));
+    for (const zn of CONFIG.CLEAR_ZONES) dirt = Math.max(dirt, smoothstep(zn.dirt1, zn.dirt0, Math.hypot(x - zn.x, z - zn.z)));
+    out.lerp(GROUND.dirt, dirt * 0.9);
     out.multiplyScalar(0.93 + rand() * 0.12);
   }
 
@@ -197,6 +199,7 @@ class ChunkManager {
     const camp = CONFIG.CAMP, tp = CONFIG.TRADING_POST;
     const clear = (x, z, rCamp, rRoad, rHerd) => {
       if (Math.hypot(x - camp.x, z - camp.z) < rCamp || Math.hypot(x - tp.x, z - tp.z) < rCamp - 4) return false;
+      for (const zn of CONFIG.CLEAR_ZONES) if (Math.hypot(x - zn.x, z - zn.z) < zn.r + (rCamp - 30)) return false;
       if (rRoad > 0 && g.roadDistance(x, z) < rRoad) return false;
       if (rHerd > 0 && CONFIG.HERDS.some((h) => Math.hypot(x - h.x, z - h.z) < rHerd)) return false;
       return true;

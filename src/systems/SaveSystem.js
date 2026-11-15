@@ -3,7 +3,7 @@
 // el juego sigue funcionando, simplemente sin persistencia.
 import { CONFIG } from '../core/Config.js';
 
-const VERSION = 2;
+const VERSION = 3;   // v3 añade honor, recompensa y contratos; las partidas v2 siguen cargándose
 
 class SaveSystem {
   constructor(game) { this.game = game; this.key = CONFIG.SAVE_KEY; this.timer = 0; this.enabled = true; }
@@ -13,7 +13,7 @@ class SaveSystem {
       const raw = localStorage.getItem(this.key);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      return data && data.v === VERSION ? data : null;
+      return data && (data.v === VERSION || data.v === 2) ? data : null;
     } catch (e) { return null; }
   }
   clear() { try { localStorage.removeItem(this.key); } catch (e) { /* almacenamiento no disponible */ } }
@@ -24,6 +24,7 @@ class SaveSystem {
       inventory: g.inventory.toJSON(),
       upgrades: [...g.upgrades],
       missions: g.missions.toJSON(),
+      honor: g.honor.toJSON(), law: g.law.toJSON(), bounties: g.bounties.toJSON(),
       hints: [...g.hints],
       player: { x: p.position.x, z: p.position.z, yaw: p.yaw, health: p.health, mag: p.mag, riding: p.riding },
       horse: { x: h.position.x, z: h.position.z, heading: h.heading, stamina: h.stamina },
@@ -46,6 +47,7 @@ class SaveSystem {
     g.upgrades = new Set(d.upgrades || []);
     (d.hints || []).forEach((h) => g.hints.add(h));
     g.missions.fromJSON(d.missions);
+    g.honor.fromJSON(d.honor); g.law.fromJSON(d.law); g.bounties.fromJSON(d.bounties);
     if (typeof d.hour === 'number') g.world.time.hour = d.hour;
     if (d.horse) {
       const h = g.horse;

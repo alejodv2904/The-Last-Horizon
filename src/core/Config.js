@@ -25,6 +25,8 @@ const CONFIG = {
   MIN_PIXEL_RATIO: 0.6,
 
   // --- Jugador ---
+  PLAYER_REGEN: 0.7,          // vida/seg tras salir de combate (regeneración lenta)
+  PLAYER_REGEN_DELAY: 9,      // segundos sin recibir daño antes de regenerar
   WALK_SPEED: 3.3,
   RUN_SPEED: 7.0,
   AIM_SPEED: 1.9,
@@ -66,6 +68,29 @@ const CONFIG = {
   INSTINCT_COOLDOWN: 5,
   SAVE_KEY: 'thelasthorizon.save.v1',
   AUTOSAVE_SECONDS: 30,
+
+  // --- Fase 3: pueblo fronterizo, bandidos y ley ---
+  TOWN: { id: 'redwood_gulch', name: 'Redwood Gulch', x: 215, z: 335, radius: 46 },
+  ROAD_TOWN: [[0, -8], [50, 70], [100, 170], [150, 262], [184, 335], [215, 335], [246, 335]],
+  // Cañón Norte: una grieta con paredes empinadas, cerrada al fondo; la rampa de entrada es suave.
+  CANYON: { path: [[-10, -400], [40, -470], [95, -530], [140, -575], [205, -600]], width: 30, depth: 9, rim: 5, ramp: 90 },
+  BANDIT_CAMPS: [
+    { id: 'canon_norte', name: 'Cañón Norte', x: 140, z: -575, flat: false, members: ['leader', 'bandit', 'bandit', 'bandit', 'bandit'] },
+    { id: 'rocas_oeste', name: 'Rocas del Oeste', x: -350, z: -120, flat: true, members: ['bandit', 'bandit', 'bandit'] },
+    { id: 'ruinas_este', name: 'Ruinas del Este', x: 520, z: 20, flat: true, members: ['bandit', 'bandit', 'bandit', 'bandit'] },
+  ],
+  BANDIT: {
+    DETECT: 52, HP: 70, LEADER_HP: 130, SPEED_RUN: 5.4, SPEED_WALK: 1.5,
+    BULLET_SPEED: 82, DAMAGE: [8, 13], FIRE_COOLDOWN: [2.0, 3.0], MAX_SHOOTERS: 2,
+    RESPAWN_SECONDS: 480, ACTIVE_RADIUS: 240, VISIBLE_RADIUS: 150,
+  },
+  AMBUSH: { FIRST_DELAY: 110, MIN_GAP: 200, MAX_GAP: 380, SAFE_RADIUS: 95, RESCUE_CHANCE: 0.35 },
 };
+
+// Zonas sin vegetación y con suelo de tierra alrededor del pueblo y los campamentos.
+CONFIG.CLEAR_ZONES = [
+  { x: CONFIG.TOWN.x, z: CONFIG.TOWN.z, r: 50, dirt0: 34, dirt1: 56 },
+  ...CONFIG.BANDIT_CAMPS.map((c) => ({ x: c.x, z: c.z, r: 26, dirt0: 8, dirt1: 17 })),
+];
 
 export { CONFIG };

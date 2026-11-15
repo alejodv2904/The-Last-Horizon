@@ -1,0 +1,39 @@
+{
+  "title": "Tablón de recompensas · Redwood Gulch",
+  "subtitle": "Por orden del Sheriff Amos Reed. Pagos en el acto, vivo o muerto.",
+  "contracts": [
+    {
+      "id": "b01_boone",
+      "title": "Eliminar al líder de la banda del Cañón Norte",
+      "target": "Boone «Dos Dedos» Hargrove",
+      "desc": "Boone lidera a los asaltantes que atacan las caravanas del camino. Se esconde en el Cañón Norte, al fondo de la grieta. Vivo vale más; muerto, trae su pañuelo como prueba.",
+      "type": "leader",
+      "camp": "canon_norte",
+      "proof": "proof_boone",
+      "reward": { "alive": 45, "dead": 30 },
+      "honor": { "alive": 6, "dead": 3 }
+    },
+    {
+      "id": "b02_cuervos",
+      "title": "Limpiar el campamento de «Los Cuervos»",
+      "target": "Banda de las Rocas del Oeste",
+      "desc": "Tres cuatreros acampan entre las rocas, al oeste del camino al puesto de Pike. Acaba con ellos.",
+      "type": "cleanup",
+      "camp": "rocas_oeste",
+      "count": 3,
+      "reward": { "dead": 18 },
+      "honor": { "dead": 2 }
+    },
+    {
+      "id": "b03_ruinas",
+      "title": "Despejar las Ruinas del Este",
+      "target": "Banda de las Ruinas",
+      "desc": "Cuatro bandidos se han hecho fuertes en unas ruinas al este del valle. Roban a todo el que pasa.",
+      "type": "cleanup",
+      "camp": "ruinas_este",
+      "count": 4,
+      "reward": { "dead": 26 },
+      "honor": { "dead": 2 }
+    }
+  ]
+}

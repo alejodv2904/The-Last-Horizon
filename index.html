@@ -148,6 +148,46 @@
   body.shopping #hud { opacity:.25; }
   .btn-row { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
   .btn.secondary { font-size:16px; padding:10px 24px; opacity:.8; }
+  /* ---------- Fase 3: honor, se busca, barks, tablón ---------- */
+  #honor { position:absolute; left:50%; top:14px; transform:translateX(-50%); width:270px; text-align:center; }
+  #honor .hb-top { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; letter-spacing:1px; opacity:.85; height:16px; }
+  #honor-delta { font:bold 13px Arial, sans-serif; opacity:0; transition:opacity .5s; } #honor-delta.show { opacity:1; transition:none; }
+  #honor-delta.up { color:#f4f0e0; } #honor-delta.down { color:#ff6a50; }
+  #honor .hb-bar { position:relative; height:10px; margin-top:3px; border-radius:6px; border:1px solid rgba(0,0,0,.7); box-shadow:0 1px 6px rgba(0,0,0,.6);
+    background:linear-gradient(90deg,#7a140c 0%,#c4452c 28%,#d6a35a 50%,#e9e0cc 75%,#ffffff 100%); }
+  #honor .hb-mark { position:absolute; top:-5px; width:0; height:0; margin-left:-6px; border-left:6px solid transparent; border-right:6px solid transparent;
+    border-top:9px solid #1a1209; filter:drop-shadow(0 0 1px #fff); transition:left .6s ease; }
+  #honor .hb-icon { position:absolute; left:50%; top:50%; width:34px; height:22px; margin:-11px 0 0 -17px; padding:2px 3px; border-radius:50%;
+    background:rgba(18,14,10,.82); border:1px solid rgba(216,180,106,.7); box-sizing:content-box; }
+  #honor .hb-icon svg { display:block; width:100%; height:100%; fill:#e9dcb9; }
+  #honor .hb-icon .band { fill:#7a2a20; }
+  #wanted { position:absolute; left:50%; top:62px; transform:translateX(-50%); display:none; text-align:center; letter-spacing:2px; font-family:'Rye', serif; color:#e85a40; text-shadow:0 2px 6px #000; }
+  #wanted.show { display:block; animation:wantedPulse 1.2s ease-in-out infinite; }
+  #wanted .stars { font-size:22px; } #wanted .txt { font-size:14px; }
+  @keyframes wantedPulse { 50% { opacity:.55; } }
+  #bark { position:absolute; left:50%; bottom:24vh; transform:translateX(-50%); max-width:min(640px, 80vw); text-align:center; opacity:0; transition:opacity .35s; font-size:20px; text-shadow:0 2px 6px #000; }
+  #bark.show { opacity:1; } #bark .who { font-family:'Rye', serif; color:var(--gold); font-size:15px; letter-spacing:1px; margin-right:8px; }
+  #quick-use { position:absolute; right:32px; bottom:112px; font-size:15px; opacity:.85; text-align:right; display:none; }
+  #quick-use.show { display:block; }
+  #hit-dir { position:fixed; left:50%; top:50%; width:0; height:0; pointer-events:none; z-index:4; opacity:0; }
+  #hit-dir i { position:absolute; left:-70px; top:-190px; width:140px; height:26px; border-top:6px solid rgba(220,30,20,.9); border-radius:50% 50% 0 0 / 100% 100% 0 0; filter:blur(1px); }
+  #hit-dir.show { animation:hitdir 1.1s ease-out; }
+  @keyframes hitdir { 0% { opacity:1; } 100% { opacity:0; } }
+  #lowhp { position:fixed; inset:0; pointer-events:none; z-index:3; opacity:0; background:radial-gradient(ellipse at center, transparent 40%, rgba(120,0,0,.55) 100%); transition:opacity .5s; }
+  body.lowhp #lowhp { opacity:1; animation:heartbeat 1.1s ease-in-out infinite; }
+  @keyframes heartbeat { 0%,100% { opacity:.5; } 30% { opacity:1; } }
+  .choice.disabled { opacity:.4; }
+  #board { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(.96); width:min(820px, calc(100vw - 32px)); max-height:calc(100vh - 40px); overflow:auto; z-index:45;
+    padding:22px 26px; color:#2b1d10; background:linear-gradient(160deg, #e6d6a8, #cdb680); border:2px solid #5b3d22; box-shadow:0 10px 50px rgba(0,0,0,.7);
+    opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; }
+  #board.open { opacity:1; pointer-events:auto; transform:translate(-50%,-50%) scale(1); }
+  #board .shop-title { font-family:'Rye', serif; font-size:26px; border-bottom:2px solid #5b3d22; padding-bottom:6px; }
+  #board .board-sub { font-style:italic; margin:8px 0; opacity:.85; } #board .board-info { font-size:17px; margin-bottom:8px; }
+  .contract { border:1px dashed rgba(60,40,20,.55); background:rgba(255,248,225,.35); padding:10px 14px; margin:10px 0; display:flex; gap:14px; align-items:center; }
+  .contract .tx { flex:1; } .contract .nm { font-family:'Rye', serif; font-size:17px; } .contract .tg { font-size:14px; opacity:.8; margin-top:2px; }
+  .contract .ds { font-size:14px; margin-top:4px; } .contract .rw { font-size:15px; margin-top:4px; color:#5a2a14; }
+  .contract.done { opacity:.5; } .contract .btns { display:flex; flex-direction:column; gap:6px; }
+  body.shopping #hud { opacity:.25; }
   .hidden { display:none !important; }
 </style>
 <script type="importmap">
@@ -160,6 +200,14 @@
 
 <div id="hud">
   <div id="clock"><span id="clock-icon">☀</span> <span id="clock-time">--:--</span></div>
+  <div id="honor">
+    <div class="hb-top"><span id="honor-tier">Forastero</span><span id="honor-delta"></span></div>
+    <div class="hb-bar"><div class="hb-mark" id="honor-mark" style="left:50%"></div>
+      <div class="hb-icon"><svg viewBox="0 0 44 26"><ellipse cx="22" cy="19" rx="20" ry="5"/><path d="M11 18 C11 6 14 3 22 3 C30 3 33 6 33 18 Z"/><rect class="band" x="11" y="13" width="22" height="3"/></svg></div></div>
+  </div>
+  <div id="wanted"><div class="stars" id="wanted-stars"></div><div class="txt" id="wanted-text"></div></div>
+  <div id="bark"><span class="who"></span><span class="txt"></span></div>
+  <div id="quick-use"></div>
   <div id="fps">— fps</div>
   <div id="toasts"></div>
   <div id="tracker"></div>
@@ -181,6 +229,8 @@
 <div id="dialogue"><div id="dlg-speaker"></div><div id="dlg-text"></div><div id="choices"></div><div id="dlg-hint">[E] continuar</div></div>
 <div id="banner"><div id="banner-title"></div><div class="rule"></div><div id="banner-sub"></div></div>
 <div id="damage-flash"></div>
+<div id="lowhp"></div>
+<div id="hit-dir"><i></i></div>
 <div id="instinct-overlay"></div>
 <div id="fade"><div id="fade-text"></div></div>
 <div id="shop">
@@ -191,11 +241,16 @@
   <h3>Comprar</h3><div class="shop-buy"></div>
   <div class="shop-foot"><button class="sbtn" data-action="sellAll">Vender todas las pieles</button><span class="hint">[E] / [Esc] salir</span><button class="sbtn" data-action="close">Cerrar</button></div>
 </div>
-<div id="inventory"><h2>Alforjas</h2><div id="inv-money"></div><div id="inv-list"></div><div class="inv-hint">[Tab] cerrar</div></div>
+<div id="board">
+  <div class="shop-title"></div><div class="board-sub"></div><div class="board-info"></div>
+  <div class="board-list"></div>
+  <div class="shop-foot"><button class="sbtn" data-action="pay">Pagar mi recompensa</button><span class="hint">[E] / [Esc] salir</span><button class="sbtn" data-action="close">Cerrar</button></div>
+</div>
+<div id="inventory"><h2>Alforjas</h2><div id="inv-money"></div><div id="inv-list"></div><div class="inv-hint">[1-9] usar objeto · [Tab] cerrar</div></div>
 
 <div class="overlay" id="overlay-start">
   <h1>The Last Horizon</h1>
-  <div class="sub">Capítulo I · Valle de Cedar Hollow — Fase 2: el mundo se abre</div>
+  <div class="sub">Capítulo I · Valle de Cedar Hollow — Fase 3: Redwood Gulch</div>
   <div class="controls">
     <div><span class="key">W A S D</span> Moverse</div><div><span class="key">Shift</span> Correr</div>
     <div><span class="key">Ratón</span> Cámara</div><div><span class="key">Clic der.</span> Apuntar</div>
@@ -203,7 +258,8 @@
     <div><span class="key">E</span> Interactuar</div><div><span class="key">Tab</span> Alforjas</div>
     <div><span class="key">F</span> Montar / desmontar</div><div><span class="key">H</span> Silbar al caballo</div>
     <div><span class="key">V</span> Instinto de cazador</div><div><span class="key">Ctrl</span> Paso (a caballo)</div>
-    <div><span class="key">T</span> Acelerar el tiempo</div><div><span class="key">Esc</span> Pausa</div>
+    <div><span class="key">Q</span> Beber tónico</div><div><span class="key">T</span> Acelerar el tiempo</div>
+    <div><span class="key">Esc</span> Pausa</div><div></div>
   </div>
   <div class="btn-row"><button class="btn" id="btn-start">CABALGAR</button><button class="btn secondary hidden" id="btn-new">NUEVA PARTIDA</button></div>
   <div class="note" id="loading-note">Cargando el valle… (si no avanza, ábrelo desde un servidor web: GitHub Pages o «python -m http.server»)</div>

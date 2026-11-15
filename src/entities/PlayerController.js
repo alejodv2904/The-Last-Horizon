@@ -20,7 +20,7 @@ class PlayerController {
     this.heading = 0; this.yaw = 0; this.pitch = -0.1; this.recoil = 0; this.shake = 0;
     this.phase = 0; this.speedNorm = 0; this.runBlend = 0; this.aimBlend = 0; this.crouchBlend = 0; this.rideBlend = 0;
     this.stamina = 100; this.exhausted = false; this.staminaDelay = 0;
-    this.health = CONFIG.PLAYER_MAX_HEALTH; this.lastHurt = 99;
+    this.health = CONFIG.PLAYER_MAX_HEALTH; this.lastHurt = 99; this.healPool = 0;
     this.mag = CONFIG.RIFLE_MAG; this.cooldown = 0; this.reloadTimer = 0; this.readyTimer = 0;
     this.isAiming = false; this.isRunning = false; this.isMoving = false;
     this.riding = false; this.faceTarget = null;
@@ -75,10 +75,12 @@ class PlayerController {
     }
     this.isAiming = canAct && input.mouse.right && this.reloadTimer <= 0;
     this.aimBlend = damp(this.aimBlend, (this.isAiming || this.readyTimer > 0) ? 1 : 0, 12, dt);
-    this.crouchBlend = damp(this.crouchBlend, g.mode === 'skinning' ? 1 : 0, 8, dt);
+    this.crouchBlend = damp(this.crouchBlend, (g.mode === 'skinning' || g.mode === 'action') ? 1 : 0, 8, dt);
     this.rideBlend = damp(this.rideBlend, this.riding ? 1 : 0, 10, dt);
     this.lastHurt += dt;
-    if (this.lastHurt > 6 && this.health < CONFIG.PLAYER_MAX_HEALTH && g.mode !== 'dead') this.health = Math.min(CONFIG.PLAYER_MAX_HEALTH, this.health + 2.5 * dt);
+    // Regeneración lenta fuera de combate + curación de tónicos (se aplica en ~2 s, no de golpe).
+    if (this.lastHurt > CONFIG.PLAYER_REGEN_DELAY && this.health < CONFIG.PLAYER_MAX_HEALTH && g.mode !== 'dead') this.health = Math.min(CONFIG.PLAYER_MAX_HEALTH, this.health + CONFIG.PLAYER_REGEN * dt);
+    if (this.healPool > 0 && g.mode !== 'dead') { const h = Math.min(this.healPool, 45 * dt); this.healPool -= h; this.health = Math.min(CONFIG.PLAYER_MAX_HEALTH, this.health + h); }
     this.shake = damp(this.shake, 0, 6, dt);
 
     let ix = 0, iz = 0;
@@ -160,6 +162,7 @@ class PlayerController {
     w.pushOut(p, 0.35);
     const npcs = this.game.npcs || [];
     for (const npc of npcs) {
+      if (npc.active === false) continue;
       const dx = p.x - npc.position.x, dz = p.z - npc.position.z, d = Math.hypot(dx, dz), min = 0.75;
       if (d < min && d > 1e-4) { p.x += dx / d * (min - d); p.z += dz / d * (min - d); }
     }
@@ -190,8 +193,9 @@ class PlayerController {
     if (this.riding) this.dismountHorse();
     this.position.set(x, this.game.world.getHeightAt(x, z), z);
     this.velocity.set(0, 0, 0);
-    this.health = CONFIG.PLAYER_MAX_HEALTH; this.stamina = 100; this.lastHurt = 99;
+    this.health = CONFIG.PLAYER_MAX_HEALTH; this.stamina = 100; this.lastHurt = 99; this.healPool = 0;
   }
+  heal(amount) { this.healPool += amount; }
 
   takeDamage(amount, fromPos) {
     const g = this.game;
@@ -199,6 +203,10 @@ class PlayerController {
     this.health = Math.max(0, this.health - amount);
     this.lastHurt = 0; this.shake = 1;
     g.ui.damageFlash();
+    if (fromPos) {   // indicador direccional del daño, relativo a la cámara
+      const dx = fromPos.x - this.position.x, dz = fromPos.z - this.position.z, sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
+      g.ui.hitDirection(Math.atan2(-dx * cy + dz * sy, dx * sy + dz * cy));
+    }
     g.audio.playHurt();
     if (fromPos) g.fx.dust.burst(_v.set(this.position.x, this.position.y + 1.0, this.position.z), 6, { color: 0x8a1a12, size: 0.07, life: 0.5, speed: 1.4, up: 1, gravity: 8 });
     if (this.health <= 0) g.onPlayerDeath();
@@ -260,6 +268,10 @@ class PlayerController {
       hit.animal.takeDamage(this.damage, dir);
       g.fx.dust.burst(hit.point, 14, { color: 0x8a1a12, size: 0.09, life: 0.7, speed: 2.2, up: 1.2, gravity: 9, alpha: 0.95 });
       g.ui.hitMarker();
+    } else if (hit.actor) {
+      hit.actor.takeDamage(this.damage, dir, hit.point, 'player');
+      g.fx.dust.burst(hit.point, 12, { color: 0x8a1a12, size: 0.09, life: 0.7, speed: 2.2, up: 1.2, gravity: 9, alpha: 0.95 });
+      g.ui.hitMarker();
     } else if (hit.type !== 'none') {
       const isRock = hit.object === g.world.chunks.veg.rock;
       g.fx.dust.burst(hit.point, 10, { color: isRock ? 0x9a948a : 0x8a7050, size: 0.18, life: 0.9, speed: 1.6, up: 1.5, gravity: 4, alpha: 0.7, grow: 1.5, drag: 1.2 });
@@ -270,15 +282,18 @@ class PlayerController {
 
   _resolveShot(origin, dir) {
     const g = this.game, maxDist = this.range;
-    let best = { dist: maxDist, point: origin.clone().addScaledVector(dir, maxDist), type: 'none', animal: null, object: null };
+    let best = { dist: maxDist, point: origin.clone().addScaledVector(dir, maxDist), type: 'none', animal: null, actor: null, object: null };
     const tT = g.world.raycastTerrain(origin, dir, maxDist);
-    if (tT < best.dist) best = { dist: tT, point: origin.clone().addScaledVector(dir, tT), type: 'terrain', animal: null, object: null };
+    if (tT < best.dist) best = { dist: tT, point: origin.clone().addScaledVector(dir, tT), type: 'terrain', animal: null, actor: null, object: null };
     this.raycaster.set(origin, dir); this.raycaster.near = 0.5; this.raycaster.far = best.dist;
-    const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.world.solidTargets], false);
+    const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.bandits.getHitboxes(), ...g.townLife.getHitboxes(), ...g.world.solidTargets], false);
     if (hits.length) {
-      const h = hits[0], animal = h.object.userData.animal || null;
-      best = { dist: h.distance, point: h.point.clone(), type: animal ? 'animal' : 'object', animal, object: h.object };
+      const h = hits[0], animal = h.object.userData.animal || null, actor = h.object.userData.actor || null;
+      best = { dist: h.distance, point: h.point.clone(), type: animal ? 'animal' : actor ? 'actor' : 'object', animal, actor, object: h.object };
     }
+    // Las balas también chocan con rocas/cajas/edificios analíticos (círculos y cajas AABB) que no tienen malla propia.
+    const sd = g.world.segmentHit(origin.x, origin.y, origin.z, origin.x + dir.x * best.dist, origin.y + dir.y * best.dist, origin.z + dir.z * best.dist);
+    if (sd >= 0 && sd * best.dist < best.dist - 0.01) best = { dist: sd * best.dist, point: origin.clone().addScaledVector(dir, sd * best.dist), type: 'object', animal: null, actor: null, object: null };
     return best;
   }
 

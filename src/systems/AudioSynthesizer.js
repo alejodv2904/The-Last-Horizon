@@ -1,7 +1,7 @@
 import { clamp } from '../core/MathUtils.js';
 
 class AudioSynthesizer {
-  constructor() { this.ctx = null; this.ready = false; this._paramTimer = 0; }
+  constructor() { this.ctx = null; this.ready = false; this._paramTimer = 0; this._music = null; }
 
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -107,12 +107,82 @@ class AudioSynthesizer {
     const fireVol = Math.pow(clamp(1 - p.fireDistance / 28, 0, 1), 1.5);
     if (fireVol > 0.02 && Math.random() < dt * 10) this._pop(fireVol);
     if (p.night > 0.65 && Math.random() < dt / 35) this.playHowl();
+    this._updateSaloon(p.saloonDistance ?? 999);
     this._paramTimer -= dt;
     if (this._paramTimer > 0) return;
     this._paramTimer = 0.25;
     this.fireBus.gain.setTargetAtTime(fireVol * 0.9, t, 0.3);
     this.cricketBus.gain.setTargetAtTime(p.night * 0.035, t, 1.2);
     this.windBus.gain.setTargetAtTime(0.65 + (1 - p.night) * 0.45, t, 1.5);
+  }
+
+  /* ---------- Fase 3 ---------- */
+  // Piano de saloon sintetizado: un ragtime de 16 pasos, programado con el reloj del AudioContext (sin timers de JS).
+  // Solo suena cuando el jugador está a menos de 46 m del saloon; el volumen baja con la distancia.
+  _updateSaloon(dist) {
+    const vol = Math.pow(clamp(1 - dist / 46, 0, 1), 1.6);
+    if (vol < 0.02) { this._music = null; return; }
+    const ctx = this.ctx, now = ctx.currentTime;
+    if (!this._music || this._music.next < now - 0.5) this._music = { next: now + 0.05, step: 0 };
+    const m = this._music, STEP = 0.2;
+    const MEL = [76, 0, 74, 76, 79, 0, 76, 0, 72, 74, 76, 0, 74, 72, 71, 0], BASS = [48, 0, 55, 0, 48, 0, 55, 0, 53, 0, 60, 0, 55, 0, 43, 0];
+    const mtof = (n) => 440 * Math.pow(2, (n - 69) / 12);
+    while (m.next < now + 0.35) {
+      const i = m.step % 16;
+      if (MEL[i]) this._pluck(m.next, mtof(MEL[i]), 0.07 * vol, 0.7);
+      if (BASS[i]) { this._pluck(m.next, mtof(BASS[i]), 0.1 * vol, 0.5); this._pluck(m.next + STEP * 0.5, mtof(BASS[i] + 12 + 4), 0.045 * vol, 0.3); }
+      m.next += STEP; m.step++;
+    }
+  }
+  // Disparo lejano/ajeno: mismo timbre, volumen y brillo según la distancia
+  playShotAt(distance) {
+    if (!this.ready) return;
+    const vol = this._vol(0.7, distance, 260); if (vol < 0.01) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._gain(vol); out.connect(this.master); if (distance > 25) out.connect(this.reverbSend);
+    const n1 = this._src(this.whiteBuffer), lp = this._filter('lowpass', Math.max(500, 5000 - distance * 22), 0.7), g1 = this._gain(0);
+    g1.gain.setValueAtTime(1.0, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.28 + Math.min(distance / 400, 0.5));
+    n1.connect(lp); lp.connect(g1); g1.connect(out); n1.start(t, Math.random()); n1.stop(t + 0.9);
+    const o = ctx.createOscillator(); o.type = 'sine'; const g3 = this._gain(0);
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.2);
+    g3.gain.setValueAtTime(0.7, t); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g3); g3.connect(out); o.start(t); o.stop(t + 0.35);
+    setTimeout(() => { try { out.disconnect(); } catch (e) { /* ya liberado */ } }, 2500);
+  }
+  // Bala que pasa silbando cerca de la cabeza
+  playWhiz() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; const bp = this._filter('bandpass', 2200, 4), g = this._gain(0);
+    o.frequency.setValueAtTime(3200, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.22);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.09, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    o.connect(bp); bp.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.3);
+  }
+  playDrink() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const s = this._src(this.whiteBuffer), bp = this._filter('bandpass', 420 + i * 120, 4), g = this._gain(0), tt = t + i * 0.2;
+      g.gain.setValueAtTime(0.0001, tt); g.gain.linearRampToValueAtTime(0.16, tt + 0.04); g.gain.exponentialRampToValueAtTime(0.001, tt + 0.17);
+      s.connect(bp); bp.connect(g); g.connect(this.master); s.start(tt, Math.random()); s.stop(tt + 0.2);
+    }
+    this._pluck(t + 0.7, 523.3, 0.05, 0.5);
+  }
+  playHonor(up) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (up) { this._pluck(t, 523.3, 0.08, 0.9); this._pluck(t + 0.1, 659.3, 0.08, 1.0); this._pluck(t + 0.2, 784, 0.08, 1.4); }
+    else { this._pluck(t, 196, 0.12, 1.0); this._pluck(t + 0.14, 155.6, 0.12, 1.4); }
+  }
+  playWanted() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [0, 0.22].forEach((d) => {
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(330, t + d); o.frequency.exponentialRampToValueAtTime(247, t + d + 0.2);
+      const lp = this._filter('lowpass', 900, 1), g = this._gain(0);
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.linearRampToValueAtTime(0.09, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.26);
+      o.connect(lp); lp.connect(g); g.connect(this.master); g.connect(this.reverbSend); o.start(t + d); o.stop(t + d + 0.3);
+    });
   }
 
   playGunshot() {

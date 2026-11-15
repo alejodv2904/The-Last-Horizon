@@ -1,3 +1,4 @@
+// Diálogos cinematográficos: líneas con orador, opciones con requisitos (p. ej. dinero) y acciones al terminar.
 class DialogueSystem {
   constructor(game) { this.game = game; this.active = false; this.queue = []; this.choices = null; this.pendingChoices = null; this.actions = []; this.justStarted = false; }
   start(npc) {
@@ -27,7 +28,9 @@ class DialogueSystem {
     }
     if (this.pendingChoices) {
       this.choices = this.pendingChoices; this.pendingChoices = null;
-      ui.showChoices(this.choices.map((c) => c.text));
+      const ms = this.game.missions;
+      ui.showChoices(this.choices.map((c) => (c.requires && !ms.meets(c.requires) ? `${c.text}  [no te alcanza]` : c.text)),
+        this.choices.map((c) => !!(c.requires && !ms.meets(c.requires))));
       return;
     }
     this.end();
@@ -48,8 +51,11 @@ class DialogueSystem {
     }
   }
   choose(i) {
-    const c = this.choices[i]; this.choices = null;
+    const c = this.choices[i], list = this.choices; this.choices = null;
     this.game.ui.hideChoices(); this.game.audio.playUI();
+    if (c.requires && !this.game.missions.meets(c.requires)) {   // no cumple: responde el PNJ y se vuelven a ofrecer las opciones
+      this.queue = (c.altReply || []).slice(); this.pendingChoices = list; this._next(); return;
+    }
     if (c.action) this.actions.push(c.action);
     this.queue = (c.reply || []).slice();
     this._next();

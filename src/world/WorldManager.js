@@ -7,6 +7,8 @@ import { TimeOfDay } from './TimeOfDay.js';
 import { WorldGen } from './WorldGen.js';
 import { ChunkManager } from './ChunkManager.js';
 import { buildCamp, buildTradingPost } from './Structures.js';
+import { buildTown } from './TownBuilder.js';
+import { buildBanditCamp } from './BanditCamps.js';
 
 const _v = new THREE.Vector3();
 const _lanternColor = new THREE.Color(0xffc070);
@@ -17,6 +19,7 @@ class WorldManager {
     this.gen = new WorldGen(9137);
     this.noise = this.gen.noise;
     this.staticObstacles = [];
+    this.zones = [];            // Fase 3: zonas con colisión propia (pueblo, campamentos, emboscadas)
     this.solidTargets = [];
     this.flags = new Set();
     this.time = new TimeOfDay(CONFIG.START_HOUR);
@@ -29,6 +32,8 @@ class WorldManager {
     this.camp = buildCamp(this);
     this.firePos = this.camp.firePos;
     this.post = buildTradingPost(this);
+    this.town = buildTown(this);
+    this.banditCamps = CONFIG.BANDIT_CAMPS.map((def) => buildBanditCamp(this, def));
     this.chunks.update({ x: CONFIG.PLAYER_SPAWN.x, z: CONFIG.PLAYER_SPAWN.z }, true);
   }
 
@@ -53,7 +58,29 @@ class WorldManager {
     return Infinity;
   }
 
-  // Empuja un punto fuera de los obstáculos cercanos (estáticos + chunk actual). Devuelve true si chocó.
+  /* ---------------- Colisiones ----------------
+   * Tres capas, de más barata a más cara:
+   *  1) staticObstacles: círculos del campamento y el puesto (pocos).
+   *  2) zones: pueblo, campamentos bandidos y emboscadas. Cada zona tiene un círculo envolvente (broad-phase):
+   *     si el punto está fuera, se descarta toda la zona con UNA comparación. Dentro, se prueban sus círculos
+   *     y sus cajas alineadas a los ejes (AABB): los edificios son cajas, no mallas.
+   *  3) obstáculos de los chunks cargados (árboles y rocas), solo los chunks que tocan el área.
+   */
+  addZone(x, z, r) {
+    const zn = { x, z, r, obstacles: [], boxes: [], active: true };
+    this.zones.push(zn);
+    return zn;
+  }
+  _pushBox(p, b, r) {
+    const cx = Math.max(b.x0, Math.min(b.x1, p.x)), cz = Math.max(b.z0, Math.min(b.z1, p.z));
+    const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= r * r) return false;
+    if (d2 > 1e-8) { const d = Math.sqrt(d2), k = (r - d) / d; p.x += dx * k; p.z += dz * k; return true; }
+    const l = p.x - b.x0, rr = b.x1 - p.x, t = p.z - b.z0, bt = b.z1 - p.z, m = Math.min(l, rr, t, bt);
+    if (m === l) p.x = b.x0 - r; else if (m === rr) p.x = b.x1 + r; else if (m === t) p.z = b.z0 - r; else p.z = b.z1 + r;
+    return true;
+  }
+  // Empuja un punto fuera de los obstáculos cercanos (estáticos + zonas + chunk actual). Devuelve true si chocó.
   pushOut(p, radius) {
     let hit = false;
     const test = (o) => {
@@ -63,6 +90,13 @@ class WorldManager {
       if (d2 < min * min && d2 > 1e-6) { const d = Math.sqrt(d2), k = (min - d) / d; p.x += dx * k; p.z += dz * k; hit = true; }
     };
     for (const o of this.staticObstacles) test(o);
+    for (const zn of this.zones) {
+      if (!zn.active) continue;
+      const dx = p.x - zn.x, dz = p.z - zn.z, rr = zn.r + radius;
+      if (dx * dx + dz * dz > rr * rr) continue;
+      for (const o of zn.obstacles) test(o);
+      for (const b of zn.boxes) if (this._pushBox(p, b, radius)) hit = true;
+    }
     this.chunks.forEachSlotNear(p.x, p.z, radius + 2, (slot) => { for (const o of slot.obstacles) test(o); });
     return hit;
   }
@@ -71,8 +105,88 @@ class WorldManager {
     let blocked = false;
     const test = (o) => { if (!blocked && Math.hypot(x - o.x, z - o.z) < o.r + r) blocked = true; };
     for (const o of this.staticObstacles) test(o);
+    for (const zn of this.zones) {
+      if (blocked) break;
+      if (!zn.active) continue;
+      const dx = x - zn.x, dz = z - zn.z, rr = zn.r + r;
+      if (dx * dx + dz * dz > rr * rr) continue;
+      for (const o of zn.obstacles) test(o);
+      for (const b of zn.boxes) {
+        if (blocked) break;
+        const cx = Math.max(b.x0, Math.min(b.x1, x)), cz = Math.max(b.z0, Math.min(b.z1, z));
+        if ((x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r) blocked = true;
+      }
+    }
     if (!blocked) this.chunks.forEachSlotNear(x, z, r + 2, (slot) => { for (const o of slot.obstacles) test(o); });
     return blocked;
+  }
+
+  /* Intersección de un segmento 3D con los sólidos del mundo (sin terreno). Devuelve t en [0,1] del primer
+   * impacto o -1. Los círculos con "h" (cajas, barriles, rocas del campamento) solo bloquean por debajo de esa altura:
+   * un bandido agachado tras una caja baja queda cubierto, pero de pie dispara por encima.
+   * Los obstáculos que contienen el origen se ignoran (la propia cobertura del tirador nunca bloquea su disparo). */
+  segmentHit(ax, ay, az, bx, by, bz) {
+    const dx = bx - ax, dy = by - ay, dz = bz - az, len2 = dx * dx + dz * dz;
+    const minX = Math.min(ax, bx), maxX = Math.max(ax, bx), minZ = Math.min(az, bz), maxZ = Math.max(az, bz);
+    let best = 2;
+    const circle = (o) => {
+      const r = o.r;
+      if (o.x < minX - r || o.x > maxX + r || o.z < minZ - r || o.z > maxZ + r || len2 < 1e-9) return;
+      const fx = ax - o.x, fz = az - o.z, c = fx * fx + fz * fz - r * r;
+      if (c <= 0) return;
+      const b2 = 2 * (fx * dx + fz * dz), disc = b2 * b2 - 4 * len2 * c;
+      if (disc < 0) return;
+      const t = (-b2 - Math.sqrt(disc)) / (2 * len2);
+      if (t < 0 || t > 1 || t >= best) return;
+      if (o.h !== undefined) { const gy = this.getHeightAt(o.x, o.z), y = ay + dy * t; if (y - gy > o.h) return; }
+      best = t;
+    };
+    for (const o of this.staticObstacles) circle(o);
+    for (const zn of this.zones) {
+      if (!zn.active) continue;
+      if (zn.x + zn.r < minX || zn.x - zn.r > maxX || zn.z + zn.r < minZ || zn.z - zn.r > maxZ) continue;
+      for (const o of zn.obstacles) circle(o);
+      for (const b of zn.boxes) {
+        if (b.x1 < minX || b.x0 > maxX || b.z1 < minZ || b.z0 > maxZ) continue;
+        if (ax > b.x0 && ax < b.x1 && az > b.z0 && az < b.z1) continue;
+        let t0 = 0, t1 = 1;
+        if (Math.abs(dx) < 1e-9) { if (ax < b.x0 || ax > b.x1) continue; }
+        else { let u0 = (b.x0 - ax) / dx, u1 = (b.x1 - ax) / dx; if (u0 > u1) { const tmp = u0; u0 = u1; u1 = tmp; } t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); }
+        if (Math.abs(dz) < 1e-9) { if (az < b.z0 || az > b.z1) continue; }
+        else { let u0 = (b.z0 - az) / dz, u1 = (b.z1 - az) / dz; if (u0 > u1) { const tmp = u0; u0 = u1; u1 = tmp; } t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); }
+        if (t0 > t1 || t0 >= best) continue;
+        const ya = ay + dy * t0, yb = ay + dy * t1;
+        if (Math.min(ya, yb) > b.y1 || Math.max(ya, yb) < b.y0) continue;
+        best = t0;
+      }
+    }
+    const hx = (ax + bx) / 2, hz = (az + bz) / 2, hr = Math.hypot(dx, dz) / 2 + 1;
+    this.chunks.forEachSlotNear(hx, hz, hr, (slot) => { for (const o of slot.obstacles) circle(o); });
+    return best > 1 ? -1 : best;
+  }
+  // ¿El terreno corta el segmento? Muestrea cada ~3 m evitando los extremos (donde están los propios tiradores).
+  terrainBlocks(ax, ay, az, bx, by, bz) {
+    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+    if (len < 4) return false;
+    const n = Math.max(1, Math.floor(len / 3));
+    for (let i = 1; i <= n; i++) {
+      const t = Math.min(1 - 1.2 / len, (i * 3 - 1.5) / len);
+      if (t <= 0) continue;
+      if (ay + (by - ay) * t < this.getHeightAt(ax + dx * t, az + dz * t) + 0.05) return true;
+    }
+    return false;
+  }
+  lineBlocked(ax, ay, az, bx, by, bz) { return this.segmentHit(ax, ay, az, bx, by, bz) >= 0 || this.terrainBlocks(ax, ay, az, bx, by, bz); }
+  // Reúne coberturas candidatas (obstáculos con altura de las zonas y rocas/árboles gruesos de los chunks).
+  collectCover(x, z, radius, out = []) {
+    for (const zn of this.zones) {
+      if (!zn.active || Math.hypot(zn.x - x, zn.z - z) > zn.r + radius) continue;
+      for (const o of zn.obstacles) if (o.h !== undefined && o.h >= 0.8 && o.r >= 0.35 && Math.hypot(o.x - x, o.z - z) < radius) out.push(o);
+    }
+    this.chunks.forEachSlotNear(x, z, radius, (slot) => {
+      for (const o of slot.obstacles) if (o.r >= 0.7 && Math.hypot(o.x - x, o.z - z) < radius) out.push(o);
+    });
+    return out;
   }
   clampToWorld(p) {
     const L = CONFIG.WORLD_LIMIT;
@@ -186,6 +300,8 @@ class WorldManager {
     } else c.fireLight.intensity = 0;
     c.lantern.material.color.setScalar(0.5 + s.night * 0.5).multiply(_lanternColor);
     this.post.lantern.material.color.setScalar(0.5 + s.night * 0.5).multiply(_lanternColor);
+    this.town.update(s.night, distXZ(playerPos, this.town.center), t);
+    for (const bc of this.banditCamps) bc.update(distXZ(playerPos, bc.center), s.night, t, this.noise);
     return s;
   }
 
