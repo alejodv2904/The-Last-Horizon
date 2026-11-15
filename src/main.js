@@ -1,4 +1,4 @@
-// Punto de entrada: carga los datos JSON (historia, tiendas, pueblo y recompensas) y arranca el juego.
+// Punto de entrada: carga los datos JSON (historia, tiendas, pueblo, recompensas, clima, campamento y alijos) y arranca el juego.
 import { Game } from './core/Game.js';
 
 async function loadJSON(path) {
@@ -10,11 +10,11 @@ async function loadJSON(path) {
 (async () => {
   const note = document.getElementById('loading-note');
   try {
-    const [story, pike, hattie, town, bounties] = await Promise.all([
+    const [story, pike, hattie, town, bounties, world] = await Promise.all([
       loadJSON('./data/story/chapter1.json'), loadJSON('./data/shop.json'), loadJSON('./data/shop_general.json'),
-      loadJSON('./data/town.json'), loadJSON('./data/bounties.json'),
+      loadJSON('./data/town.json'), loadJSON('./data/bounties.json'), loadJSON('./data/world.json'),
     ]);
-    window.__game = new Game({ story, shops: { pike, hattie }, town, bounties });
+    window.__game = new Game({ story, shops: { pike, hattie }, town, bounties, world });
   } catch (err) {
     console.error(err);
     note.textContent = location.protocol === 'file:'

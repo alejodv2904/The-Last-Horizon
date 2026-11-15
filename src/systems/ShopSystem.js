@@ -23,6 +23,12 @@ class ShopSystem {
     if (!cat) return;
     if (npc.id === 'hattie' && g.law.level > 0) { g.ui.bark(npc.name, 'No atiendo a quien busca el sheriff. Pague su recompensa primero.'); return; }
     this.catalog = cat;
+    const rw = npc.id === 'hattie' && g.encounters.pendingShopReward ? g.encounters.data.snake.shopGift : null;   // futura recompensa del viajero
+    if (rw) {
+      g.encounters.pendingShopReward = false;
+      g.inventory.addMoney(rw.money); Object.entries(rw.items).forEach(([k, n]) => g.inventory.add(k, n, true));
+      g.ui.banner('RECOMPENSA DE LA TIENDA', rw.text, 5); g.audio.playMissionComplete();
+    }
     this.isOpen = true; this.npc = npc; npc.talking = true;
     g.setMode('shop');
     g.input.exitLock();

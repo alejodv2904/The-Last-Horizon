@@ -84,6 +84,11 @@ const CONFIG = {
     BULLET_SPEED: 82, DAMAGE: [8, 13], FIRE_COOLDOWN: [2.0, 3.0], MAX_SHOOTERS: 2,
     RESPAWN_SECONDS: 480, ACTIVE_RADIUS: 240, VISIBLE_RADIUS: 150,
   },
+  // --- Fase 4: arroyo con puente en el camino al pueblo, campamento vivo, encuentros ---
+  CREEK: { x: 125, z: 216, halfLen: 95, width: 8, depth: 3.4, bridgeLen: 17, bridgeWidth: 5.4 },
+  CAMP_LIFE: { RADIUS: 45, BASE_CAPACITY: 16, TENT_CAPACITY: 16, FIRST_MORALE: 45 },
+  ENCOUNTERS: { FIRST_DELAY: 100, MIN_GAP: 170, MAX_GAP: 320, SAFE_TOWN: 95 },
+  MAP: { CELL: 20, REVEAL_RADIUS: 75 },
   AMBUSH: { FIRST_DELAY: 110, MIN_GAP: 200, MAX_GAP: 380, SAFE_RADIUS: 95, RESCUE_CHANCE: 0.35 },
 };
 
@@ -91,6 +96,7 @@ const CONFIG = {
 CONFIG.CLEAR_ZONES = [
   { x: CONFIG.TOWN.x, z: CONFIG.TOWN.z, r: 50, dirt0: 34, dirt1: 56 },
   ...CONFIG.BANDIT_CAMPS.map((c) => ({ x: c.x, z: c.z, r: 26, dirt0: 8, dirt1: 17 })),
+  { x: CONFIG.CREEK.x, z: CONFIG.CREEK.z, r: 14, dirt0: 5, dirt1: 11 },
 ];
 
 export { CONFIG };

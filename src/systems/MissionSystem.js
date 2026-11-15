@@ -77,6 +77,9 @@ class MissionSystem {
         case 'shop': g.openShopById(a); break;
         case 'board': g.openBoard(); break;
         case 'wanted': g.law.addBounty(Number(a), 'Decisión'); break;
+        case 'gift': g.camp.giveGift(a); break;
+        case 'tip': g.camp.giveGift('tobias'); break;
+        case 'morale': g.camp.addMorale(Number(a)); break;
         default: break;
       }
     }
@@ -87,6 +90,8 @@ class MissionSystem {
   }
   _match(w) {
     if (!w) return true;
+    if (w.moraleTier && this.game.camp.tier.id !== w.moraleTier) return false;
+    if (w.giftReady && !this.game.camp.giftReady(w.giftReady)) return false;
     if (w.flag && !this.flags.has(w.flag)) return false;
     if (w.mission && this.states[w.mission] !== w.state) return false;
     if (w.honorTier && this.game.honor.tier.id !== w.honorTier) return false;

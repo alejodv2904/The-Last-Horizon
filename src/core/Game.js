@@ -1,5 +1,5 @@
 // Orquestador: bucle principal, modos de juego, interacciones, cámara cinemática y rendimiento.
-// Modos: explore | dialogue | skinning | action | shop | board | arrested | dead
+// Modos: explore | dialogue | skinning | action | shop | board | camp | map | travel | arrested | dead
 import * as THREE from 'three';
 import { CONFIG } from './Config.js';
 import { clamp, lerp, damp, easeInOut, distXZ } from './MathUtils.js';
@@ -25,14 +25,18 @@ import { LawSystem } from '../systems/LawSystem.js';
 import { TownLife } from '../systems/TownLife.js';
 import { BountySystem } from '../systems/BountySystem.js';
 import { LootSystem } from '../systems/Loot.js';
+import { CampSystem } from '../systems/CampSystem.js';
+import { TreasureSystem } from '../systems/TreasureSystem.js';
+import { MapSystem } from '../systems/MapSystem.js';
+import { EncounterDirector } from '../ai/EncounterDirector.js';
 import { UIManager } from '../ui/UIManager.js';
 
 class Game {
-  // data: { story, shops: { pike, hattie }, town, bounties }
+  // data: { story, shops: { pike, hattie }, town, bounties, world }
   constructor(data) {
     const { story } = data;
     this.bus = new EventBus();
-    this.story = story; this.townData = data.town;
+    this.story = story; this.townData = data.town; this.worldData = data.world;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
     this.renderer.setPixelRatio(this.pixelRatio);
@@ -79,6 +83,12 @@ class Game {
     this.law = new LawSystem(this, this.bandits, this.world.town, this.townData);
     this.bandits.law = this.law;
     this.bounties = new BountySystem(this, data.bounties);
+    this.camp = new CampSystem(this, data.world.camp, this.world.campLife);
+    this.npcs.push(...this.camp.companions);
+    this.treasure = new TreasureSystem(this, data.world.treasures);
+    this.encounters = new EncounterDirector(this, data.world.encounters);
+    this.map = new MapSystem(this);
+    this.travel = null; this._fullT = 0;
 
     this.mode = 'explore'; this.started = false; this.paused = true; this.elapsed = 0;
     this.skinning = null; this.death = null; this.action = null;
@@ -105,7 +115,7 @@ class Game {
       : 'Recomendado: Chrome o Edge. El juego ajusta la resolución automáticamente para mantener 60 FPS.';
   }
 
-  get _menuMode() { return this.mode === 'shop' || this.mode === 'board'; }
+  get _menuMode() { return this.mode === 'shop' || this.mode === 'board' || this.mode === 'camp' || this.mode === 'map'; }
 
   _bindEvents() {
     window.addEventListener('resize', () => {
@@ -139,7 +149,11 @@ class Game {
         if (def) { this.ui.notify(`+${e.delta} ${def.name}`, def.desc); this.audio.playItem(); }
       }
     });
-    this.bus.on('flag:set', (f) => { this.world.applyFlag(f); this.townLife.applyFlag(f); if (this.started) this.save.save(); });
+    this.bus.on('flag:set', (f) => { this.world.applyFlag(f); this.townLife.applyFlag(f); this.camp.applyFlag(f); if (this.started) this.save.save(); });
+    this.bus.on('inventory:full', (e) => {
+      if (this.elapsed - this._fullT < 3) return;
+      this._fullT = this.elapsed; this.ui.notify('Alforjas llenas', 'Vende o dona pieles, o mejora la Tienda del campamento (+16).');
+    });
     this.bus.on('animal:killed', (a) => {
       if (a.species === 'deer') this._hint('skin', 'Ciervo abatido', 'Acércate al cuerpo y pulsa [E] para despellejarlo.');
       else this._hint('skinwolf', 'Lobo abatido', 'Su piel vale buen dinero en el puesto de Pike.');
@@ -161,6 +175,8 @@ class Game {
     setTimeout(() => this._hint('move', 'El campamento te espera', 'Habla con Silas Crane junto a la fogata. [Shift] para correr.'), 4800);
     setTimeout(() => this._hint('horse', 'Tu caballo, Ceniza', '[F] montar o desmontar · [H] silbar para llamarlo · [Shift] galopar.'), 11000);
     setTimeout(() => this._hint('instinct', 'Instinto de cazador', 'Pulsa [V] para ver rastros y animales cercanos.'), 18000);
+    setTimeout(() => this._hint('camp4', 'El campamento está vivo', 'Habla con tus compañeros. Dona en la Caja de Contribuciones y compra mejoras en el Libro de Contabilidad.'), 33000);
+    setTimeout(() => this._hint('map', 'Mapa del valle', 'Pulsa [M] para ver lo explorado. Con la Tienda Mejorada podrás viajar rápido.'), 42000);
     setTimeout(() => this._hint('town', 'Redwood Gulch', 'Un pueblo fronterizo al sureste: sigue el camino de tierra desde el campamento.'), 26000);
     this.save.save();
   }
@@ -168,7 +184,7 @@ class Game {
   setMode(mode) {
     this.mode = mode;
     if (mode !== 'explore') { this.ui.hidePrompt(); this.ui.closeInventory(); }
-    if (mode === 'dialogue' || mode === 'shop' || mode === 'board' || mode === 'dead') this.instinct.deactivate();
+    if (mode === 'dialogue' || mode === 'shop' || mode === 'board' || mode === 'camp' || mode === 'map' || mode === 'travel' || mode === 'dead') this.instinct.deactivate();
   }
 
   /* ---------------- Interacciones ---------------- */
@@ -227,6 +243,32 @@ class Game {
       if (d > 4) this.ui.notify('Silbas a Ceniza', d > CONFIG.HORSE.CALL_TELEPORT_DIST ? 'Viene desde lejos…' : `A ${Math.round(d)} m`);
     }
   }
+  /* Viaje rápido: barras de cine + fundido a negro con el destino; se teletransporta en lo más oscuro y avanza la hora. */
+  fastTravel(poi) {
+    const dest = poi.travel, from = this.player.position, riding = this.player.riding;
+    const hours = clamp(distXZ(from, dest) / (riding ? 10 : 5) * (24 / CONFIG.DAY_LENGTH_SECONDS), 0.2, 6);
+    this.setMode('travel'); this.travel = { t: 0, poi, hours, moved: false };
+    this.ui.setLetterbox(true); this.ui.setFade(true, `Camino a ${poi.name}…`); this.audio.playWhistle();
+  }
+  _updateTravel(dt) {
+    const T = this.travel; T.t += dt;
+    if (!T.moved && T.t > 1.5) {
+      T.moved = true;
+      const p = this.player, w = this.world, d = T.poi.travel, h = this.horse;
+      p.position.set(d.x, w.getHeightAt(d.x, d.z), d.z); p.velocity.set(0, 0, 0);
+      p.yaw = p.heading = Math.atan2(T.poi.x - d.x, T.poi.z - d.z);
+      if (p.riding) { h.position.copy(p.position); h.heading = p.yaw; h.speed = 0; }
+      else { h.position.set(d.x + Math.cos(p.yaw) * 2.6, 0, d.z - Math.sin(p.yaw) * 2.6); h.position.y = w.getHeightAt(h.position.x, h.position.z); h.state = 'idle'; h.speed = 0; }
+      h.tracks.reset(); w.time.hour = (w.time.hour + T.hours) % 24;
+      w.chunks.update(p.position, true); this._updateCamera(0.016, true);
+      this.bandits.releaseAllTokens(); this.bandits.projectiles.clear();
+    }
+    if (T.t > 2.2) this.ui.setFade(false);
+    if (T.t > 3.4) {
+      this.ui.setLetterbox(false); this.setMode('explore'); this.travel = null;
+      this.ui.banner(T.poi.name, `Han pasado ${Math.max(1, Math.round(T.hours))} h de camino`, 3.2); this.save.save();
+    }
+  }
   openShopById(id) { const npc = this.npcs.find((n) => n.id === id); if (npc) this.shop.open(npc); }
   openBoard() { this.bounties.open(); }
 
@@ -260,11 +302,13 @@ class Game {
     }
     let key = null, prompt = null, action = null;
     const sheriff = this.law.sheriff;
+    const campAct = this.camp.getInteraction(pos) || this.treasure.getInteraction(pos) || this.encounters.getInteraction(pos);
     const npc = this.npcs.find((n) => n.active && distXZ(pos, n.position) < 3.0);
     const captive = this.bandits.getNearestSurrendered(pos, 2.8);
     const citizen = this.townLife.nearestCitizen(pos, 2.6);
     const corpse = this.townLife.nearestCorpse(pos, 2.2);
-    if (npc) {
+    if (campAct) { key = 'E'; prompt = campAct.prompt; action = campAct.action; }
+    else if (npc) {
       key = 'E';
       if (npc.interaction === 'shop') { prompt = `Comerciar con ${npc.name}`; action = () => this.shop.open(npc); }
       else { prompt = `Hablar con ${npc.name}`; action = () => { this.ui.hidePrompt(); this.dialogue.start(npc); }; }
@@ -369,7 +413,7 @@ class Game {
       this.pixelRatio = Math.min(maxPR, this.pixelRatio + 0.05); this.renderer.setPixelRatio(this.pixelRatio); pf.highStreak = 0;
     }
     const info = this.renderer.info.render, ch = this.world.chunks;
-    this.ui.setFps(`${Math.round(fps)} FPS · ${info.calls} draw calls · ${(info.triangles / 1000).toFixed(0)}k tris · res ${this.pixelRatio.toFixed(2)}x · chunks ${ch.active.size}/9 (cola ${ch.pendingBuilds}) · IA fauna ${this.wildlife.activeCount} · IA pistoleros ${this.bandits.activeCount || 0}`);
+    this.ui.setFps(`${Math.round(fps)} FPS · ${info.calls} draw calls · ${(info.triangles / 1000).toFixed(0)}k tris · res ${this.pixelRatio.toFixed(2)}x · chunks ${ch.active.size}/9 (cola ${ch.pendingBuilds}) · IA fauna ${this.wildlife.activeCount} · IA pistoleros ${this.bandits.activeCount || 0} · ${this.world.weather.state.name}`);
   }
 
   /* ---------------- Bucle ---------------- */
@@ -391,6 +435,10 @@ class Game {
     this.townLife.update(dt);
     this.law.update(dt);
     this.loot.update(dt);
+    this.camp.update(dt);
+    this.treasure.update(dt);
+    this.encounters.update(dt);
+    this.map.update(dt);
   }
 
   update(dt) {
@@ -407,8 +455,11 @@ class Game {
     if (this.mode === 'dialogue') this.dialogue.update(dt, input);
     else if (this.mode === 'skinning') this._updateSkinning(dt);
     else if (this.mode === 'action') this._updateAction(dt);
-    else if (this.mode === 'shop') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) this.shop.close(); }
-    else if (this.mode === 'board') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) this.bounties.close(); }
+    else if (this.mode === 'shop') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) { this.shop.close(); input.consume(); } }
+    else if (this.mode === 'board') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) { this.bounties.close(); input.consume(); } }
+    else if (this.mode === 'camp') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) { this.camp.close(); input.consume(); } }
+    else if (this.mode === 'map') { if (input.wasPressed('Escape') || input.wasPressed('KeyM')) { this.map.close(); input.consume(); } else this.map.frame(); }
+    else if (this.mode === 'travel') this._updateTravel(dt);
     else if (this.mode === 'dead') this._updateDeath(dt);
     this._simulate(dt);
     this.instinct.update(dt);
@@ -419,6 +470,7 @@ class Game {
         for (let i = 1; i <= 9; i++) if (input.wasPressed(`Digit${i}`) && this.ui.inventoryUsable[i - 1]) this.useItem(this.ui.inventoryUsable[i - 1]);
       }
       if (input.wasPressed('KeyQ')) this.useTonic();
+      if (input.wasPressed('KeyM')) this.map.open();
       if (input.wasPressed('KeyT')) {
         this.world.time.timeScale = this.world.time.timeScale > 1 ? 1 : 40;
         this.ui.notify(this.world.time.timeScale > 1 ? 'Tiempo acelerado ×40' : 'Tiempo normal');
@@ -435,7 +487,8 @@ class Game {
     this._updateCamera(dt);
     this.save.update(dt);
 
-    this.audio.update(dt, { fireDistance: distXZ(this.player.position, this.world.firePos), night: sky.night, saloonDistance: distXZ(this.player.position, this._saloonPos) });
+    const wx = this.world.weather;
+    this.audio.update(dt, { fireDistance: distXZ(this.player.position, this.world.firePos), night: sky.night, saloonDistance: distXZ(this.player.position, this._saloonPos), rain: wx.v.rain, wind: wx.v.wind });
     const pl = this.player, ui = this.ui, inv = this.inventory;
     ui.update(dt);
     ui.setAmmo(pl.mag, inv.count('ammo'), pl.reloadTimer > 0, this.upgrades.size ? 'RIFLE DE PALANCA +' : 'RIFLE DE PALANCA');
@@ -443,7 +496,7 @@ class Game {
     ui.setHealth(pl.health);
     ui.setLowHealth(pl.health < 30 && this.mode !== 'dead');
     ui.setHorseStamina(this.horse.stamina, this.horse.exhausted, pl.riding);
-    ui.setClock(this.world.time.formatClock(), sky.night);
+    ui.setClock(this.world.time.formatClock(), sky.night, wx.state.icon);
     ui.setHonor(this.honor.ratio, this.honor.tier.name);
     const tonics = inv.count('tonic') + inv.count('tonic_strong');
     ui.setQuick(tonics > 0 ? `[Q] Tónico ×${tonics}` : '');
@@ -470,8 +523,9 @@ class Game {
     if (!pl.riding) icons.push({ type: 'horse', x: this.horse.position.x, z: this.horse.position.z, clamp: true });
     const marker = ms.getMarkerFor('silas');
     if (marker) icons.push({ type: marker === 'ready' ? 'npcReady' : 'npc', x: this.npcs[0].position.x, z: this.npcs[0].position.z, clamp: true });
-    const rescue = this.bandits.ambush.radarPos;
+    const rescue = this.bandits.ambush.radarPos || this.encounters.radarPos;
     if (rescue) icons.push({ type: 'event', x: rescue.x, z: rescue.z, clamp: true });
+    for (const t of this.treasure.items) if (t.revealed && !t.collected && distXZ(t, pos) < 250) icons.push({ type: 'treasure', x: t.x, z: t.z, clamp: true });
     for (const a of this.wildlife.animals) {
       const d = distXZ(a.position, pos);
       if (!a.alive) { if (!a.skinned && d < 400) icons.push({ type: 'carcass', x: a.position.x, z: a.position.z, clamp: true }); continue; }

@@ -108,6 +108,7 @@ class BountySystem {
     g.inventory.addMoney(pay); g.honor.add(honor, how === 'alive' ? 'Fugitivo entregado vivo' : 'Recompensa cobrada');
     g.ui.banner('RECOMPENSA COBRADA', `${c.target} · $${pay.toFixed(2)}`, 4.5); g.audio.playMissionComplete();
     if (c.type === 'leader') this.leaderRetired = true;
+    g.bus.emit('bounty:claimed', c.id);
     g.missions.updateTracker();
   }
 

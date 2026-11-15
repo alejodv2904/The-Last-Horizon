@@ -196,6 +196,17 @@ function poseHumanoid(h, s) {
     torsoX = lerp(torsoX, 0.3, hunker);
     aLx = lerp(aLx, -0.9, hunker); fL = lerp(fL, -1.1, hunker); aRx = lerp(aRx, -0.8, hunker); fR = lerp(fR, -1.2, hunker);
   }
+  const sit = s.sit || 0, chop = s.chop || 0;
+  if (sit > 0) {      // sentado sobre un tronco, manos sobre las rodillas (piernas rectas en la versión lite)
+    hipY = lerp(hipY, 0.5, sit);
+    lL = lerp(lL, -1.45, sit); lR = lerp(lR, -1.45, sit); sL = lerp(sL, 1.5, sit); sR = lerp(sR, 1.5, sit);
+    torsoX = lerp(torsoX, 0.08, sit); aLx = lerp(aLx, -0.55, sit); aRx = lerp(aRx, -0.55, sit); fL = lerp(fL, -0.9, sit); fR = lerp(fR, -0.9, sit);
+  }
+  if (chop > 0) {     // hachazo: los dos brazos suben y bajan con el torso
+    const ph = 0.5 + 0.5 * Math.sin(t * 3.4), up = ph * ph;
+    aLx = lerp(aLx, -0.5 - up * 1.9, chop); aRx = lerp(aRx, -0.5 - up * 1.9, chop); aLz = lerp(aLz, -0.12, chop); aRz = lerp(aRz, 0.12, chop);
+    fL = lerp(fL, -0.35, chop); fR = lerp(fR, -0.35, chop); torsoX = lerp(torsoX, 0.5 - up * 0.45, chop); hipY = lerp(hipY, 0.92, chop);
+  }
   if (bound > 0) {    // muñecas atadas al frente
     aLx = lerp(aLx, -0.75, bound); aLz = lerp(aLz, -0.12, bound); fL = lerp(fL, -1.2, bound);
     aRx = lerp(aRx, -0.75, bound); aRz = lerp(aRz, 0.12, bound); fR = lerp(fR, -1.2, bound);

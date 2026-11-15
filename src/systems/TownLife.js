@@ -13,7 +13,7 @@ class TownLife {
     this.citizens = data.citizens.map((def) => new Citizen(game, this, def));
     this.panic = 0; this.panicPos = new THREE.Vector3(); this.barkCd = 0; this.greetBarkCd = 4;
     this.strongboxCd = 0; this.lidOpen = 0; this.near = false;
-    this._ctx = { pp: null, dist: 0, weaponDrawn: false, animate: true };
+    this._ctx = { pp: null, dist: 0, weaponDrawn: false, animate: true, rain: 0 };
     game.bus.on('gunshot', (e) => this._onShot(e));
   }
 
@@ -118,7 +118,7 @@ class TownLife {
       if (c.state === 'dead' && c.deadTime > 360 && d > 100) c.respawn();
     }
     if (!this.near) return;
-    ctx.pp = pp; ctx.weaponDrawn = this.weaponDrawn(); ctx.animate = d < 110;
+    ctx.pp = pp; ctx.weaponDrawn = this.weaponDrawn(); ctx.animate = d < 110; ctx.rain = g.world.weather.rain;
     this.greetBarkCd -= dt;
     for (const c of this.citizens) {
       ctx.dist = distXZ(c.position, pp);

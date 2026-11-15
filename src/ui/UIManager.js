@@ -23,8 +23,13 @@ class UIManager {
       honorTier: $('honor-tier'), honorDelta: $('honor-delta'), honorMark: $('honor-mark'),
       wanted: $('wanted'), wantedStars: $('wanted-stars'), wantedText: $('wanted-text'),
       bark: $('bark'), barkWho: $('bark').querySelector('.who'), barkTxt: $('bark').querySelector('.txt'),
-      quick: $('quick-use'), hitDir: $('hit-dir'), board: $('board'),
+      quick: $('quick-use'), hitDir: $('hit-dir'), board: $('board'), camp: $('camp'), morale: $('morale'),
     };
+    this._campHandler = null;
+    this.el.camp.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-action]');
+      if (b && this._campHandler && !b.disabled) this._campHandler(b.dataset.action, b.dataset.id);
+    });
     this._barkTimer = null; this._honorTimer = null; this._boardHandler = null; this.inventoryUsable = [];
     this.el.board.addEventListener('click', (e) => {
       const b = e.target.closest('[data-action]');
@@ -85,9 +90,10 @@ class UIManager {
     this._set('horseVis', visible, (on) => this.el.horse.classList.toggle('hidden', !on));
     if (visible) this._core(this.el.horse, this.el.horseArc, 'horse', v, exhausted);
   }
-  setClock(text, night) {
+  // icon: símbolo del clima actual (de día); de noche se muestra la luna
+  setClock(text, night, icon = '☀') {
     this._set('clock', text, () => { this.el.clock.textContent = text; });
-    this._set('clockIcon', night > 0.5, (n) => { this.el.clockIcon.textContent = n ? '☾' : '☀'; });
+    this._set('clockIcon', `${night > 0.5}|${icon}`, () => { this.el.clockIcon.textContent = night > 0.5 ? '☾' : icon; });
   }
   setCrosshair(visible, aim, spread) {
     this._set('cross', `${visible}|${aim > 0.5}|${spread.toFixed(2)}`, () => {
@@ -156,7 +162,7 @@ class UIManager {
   get inventoryOpen() { return this.el.inventory.classList.contains('open'); }
   renderInventory(inv, upgrades) {
     const ups = upgrades && upgrades.size ? ` · Mejoras: ${[...upgrades].map((u) => (u === 'barrel' ? 'cañón largo' : 'cartuchos expansivos')).join(', ')}` : '';
-    this.el.invMoney.textContent = `Dinero: $${inv.money.toFixed(2)}${ups}`;
+    this.el.invMoney.textContent = `Dinero: $${inv.money.toFixed(2)}${ups} · Alforjas ${inv.carried}/${inv.capacity}`;
     this.el.invList.innerHTML = '';
     const entries = [...inv.items.entries()].filter(([, n]) => n > 0);
     this.inventoryUsable = [];
@@ -260,6 +266,39 @@ class UIManager {
     });
   }
 
+  /* ---------- Fase 4: moral y panel del campamento ---------- */
+  setMorale(near, morale, tier) {
+    this._set('morale', `${near}|${Math.round(morale)}|${tier}`, () => {
+      this.el.morale.classList.toggle('show', near);
+      this.el.morale.innerHTML = `<span class="mi">${morale >= 65 ? '☺' : morale >= 35 ? '☻' : '☹'}</span> Moral · ${tier} <b>${Math.round(morale)}</b>`;
+    });
+  }
+  showCamp(view, handler) {
+    this._campHandler = handler;
+    this.closeInventory(); this.hidePrompt();
+    this.el.camp.classList.add('open'); document.body.classList.add('shopping');
+    this.renderCamp(view);
+  }
+  hideCamp() { this.el.camp.classList.remove('open'); document.body.classList.remove('shopping'); this._campHandler = null; }
+  renderCamp(v) {
+    const c = this.el.camp, box = v.mode === 'box';
+    c.querySelector('.shop-title').textContent = box ? 'Caja de Contribuciones' : 'Libro de Contabilidad';
+    c.querySelector('.camp-sub').textContent = `${v.name} · Moral ${v.tier}`;
+    c.querySelector('.mb-fill').style.width = `${v.morale}%`;
+    c.querySelector('.camp-info').textContent = `Tu dinero: $${v.money.toFixed(2)} · Fondos del campamento: $${v.funds.toFixed(2)} · Aportado en total: $${v.donated.toFixed(2)} · Alforjas: ${v.capacity}`;
+    const don = c.querySelector('.camp-donate'), led = c.querySelector('.camp-ledger');
+    don.style.display = box ? '' : 'none'; led.style.display = box ? 'none' : '';
+    const btns = don.querySelector('.btns'); btns.innerHTML = '';
+    [1, 5, 20].forEach((a) => btns.appendChild(this._button(`Donar $${a}`, 'donate', String(a), v.money < a)));
+    btns.appendChild(this._button(v.pelts.n ? `Donar ${v.pelts.n} pieles (≈ $${v.pelts.value.toFixed(2)})` : 'Sin pieles que donar', 'donatePelts', null, !v.pelts.n));
+    const ups = led.querySelector('.camp-ups'); ups.innerHTML = '';
+    v.upgrades.forEach((u) => {
+      const row = this._itemRow({ name: u.name, icon: u.icon, desc: u.desc }, u.owned ? 'COMPRADA' : `$${u.cost.toFixed(2)}`,
+        this._button(u.owned ? 'En el campamento' : 'Comprar', 'buy', u.id, u.owned || !u.affordable));
+      ups.appendChild(row);
+    });
+  }
+
   setFps(text) { this.el.fps.textContent = text; }
   update(dt) {
     if (this._typing && this._typing.shown < this._typing.text.length) {
@@ -328,6 +367,7 @@ class UIManager {
           ctx.fillStyle = '#fff'; ctx.font = 'bold 8px Georgia'; ctx.fillText('☠', x, y + 2); break;
         case 'law': ctx.fillStyle = '#6aa8ff'; ctx.beginPath(); ctx.arc(x, y, 3.6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); break;
         case 'event': ctx.fillStyle = '#ffd860'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1a1209'; ctx.font = 'bold 11px Georgia'; ctx.fillText('?', x, y + 0.5); break;
+        case 'treasure': ctx.strokeStyle = '#ffd860'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke(); break;
         case 'board': ctx.fillStyle = '#d8c496'; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.fillStyle = '#7a1810'; ctx.font = 'bold 8px Georgia'; ctx.fillText('$', x, y + 0.5); break;
         default: break;
       }

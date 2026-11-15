@@ -17,7 +17,7 @@ class AudioSynthesizer {
     this.reverb = ctx.createConvolver(); this.reverb.buffer = this._impulse(3.0, 2.6);
     this.reverbSend = ctx.createGain(); this.reverbSend.gain.value = 0.32;
     this.reverbSend.connect(this.reverb); this.reverb.connect(this.master);
-    this._startWind(); this._startFire(); this._startCrickets();
+    this._startWind(); this._startFire(); this._startCrickets(); this._startRain();
     this.ready = true;
   }
   _noiseBuffer(seconds, type) {
@@ -73,6 +73,15 @@ class AudioSynthesizer {
     this.fireBus.connect(this.master);
     src.start(0, 1.3);
   }
+  // Lluvia: dos capas de ruido continuas (agudos de gotas + cuerpo grave) cuyo volumen sigue la intensidad del clima.
+  _startRain() {
+    this.rainBus = this._gain(0);
+    const s1 = this._src(this.whiteBuffer, true), hp = this._filter('highpass', 1800, 0.5), g1 = this._gain(0.15);
+    s1.connect(hp); hp.connect(g1); g1.connect(this.rainBus);
+    const s2 = this._src(this.brownBuffer, true), bp = this._filter('bandpass', 700, 0.6), g2 = this._gain(0.55);
+    s2.connect(bp); bp.connect(g2); g2.connect(this.rainBus);
+    this.rainBus.connect(this.master); s1.start(0, Math.random()); s2.start(0, Math.random() * 2);
+  }
   _pop(vol) {
     const ctx = this.ctx, t = ctx.currentTime;
     const s = this._src(this.whiteBuffer);
@@ -108,12 +117,15 @@ class AudioSynthesizer {
     if (fireVol > 0.02 && Math.random() < dt * 10) this._pop(fireVol);
     if (p.night > 0.65 && Math.random() < dt / 35) this.playHowl();
     this._updateSaloon(p.saloonDistance ?? 999);
+    const rain = p.rain || 0;
+    if (rain > 0.08 && Math.random() < dt * rain * 45) this._pop(rain * 0.9);   // golpeteo de gotas sueltas
     this._paramTimer -= dt;
     if (this._paramTimer > 0) return;
     this._paramTimer = 0.25;
     this.fireBus.gain.setTargetAtTime(fireVol * 0.9, t, 0.3);
     this.cricketBus.gain.setTargetAtTime(p.night * 0.035, t, 1.2);
-    this.windBus.gain.setTargetAtTime(0.65 + (1 - p.night) * 0.45, t, 1.5);
+    this.windBus.gain.setTargetAtTime(0.65 + (1 - p.night) * 0.45 + (p.wind || 0) * 0.55, t, 1.5);
+    this.rainBus.gain.setTargetAtTime(rain * 0.6, t, 0.9);
   }
 
   /* ---------- Fase 3 ---------- */
@@ -157,6 +169,22 @@ class AudioSynthesizer {
     o.frequency.setValueAtTime(3200, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.22);
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.09, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
     o.connect(bp); bp.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.3);
+  }
+  // Trueno lejano: restallido (solo si está cerca) + retumbar grave de larga cola con reverberación
+  playThunder(distance) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime, vol = clamp(1 - distance / 2400, 0.15, 1) * 0.85;
+    if (distance < 700) {
+      const n = this._src(this.whiteBuffer), hp = this._filter('highpass', 600, 0.7), g = this._gain(0);
+      g.gain.setValueAtTime(vol * 0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      n.connect(hp); hp.connect(g); g.connect(this.master); n.start(t, Math.random()); n.stop(t + 0.4);
+    }
+    for (let i = 0; i < 3; i++) {
+      const tt = t + i * (0.5 + Math.random() * 0.7), n = this._src(this.brownBuffer), lp = this._filter('lowpass', 420 - i * 80, 0.8), g = this._gain(0);
+      lp.frequency.setValueAtTime(420 - i * 80, tt); lp.frequency.exponentialRampToValueAtTime(70, tt + 3.5);
+      g.gain.setValueAtTime(0.0001, tt); g.gain.linearRampToValueAtTime(vol * (1.2 - i * 0.3), tt + 0.18); g.gain.exponentialRampToValueAtTime(0.001, tt + 3.8 + i);
+      n.connect(lp); lp.connect(g); g.connect(this.master); g.connect(this.reverbSend); n.start(tt, Math.random() * 2); n.stop(tt + 5);
+    }
   }
   playDrink() {
     if (!this.ready) return;

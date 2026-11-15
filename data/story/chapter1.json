@@ -37,6 +37,18 @@
     "sal": {
       "name": "Sal Moreno",
       "role": "Cantinero"
+    },
+    "tobias": {
+      "name": "Tobías Reyes",
+      "role": "Leñador del campamento"
+    },
+    "rosa": {
+      "name": "Rosa Delgado",
+      "role": "Cocinera del campamento"
+    },
+    "jim": {
+      "name": "Jim «Ojo de Halcón» Ward",
+      "role": "Vigía del campamento"
     }
   },
   "intro": {
@@ -1085,6 +1097,209 @@
           {
             "speaker": "npc",
             "text": "Si busca trabajo: la banda de Boone «Dos Dedos» asalta caravanas desde el Cañón Norte. El sheriff paga bien por su cabeza."
+          }
+        ]
+      }
+    ],
+    "tobias": [
+      {
+        "when": {
+          "moraleTier": "high",
+          "giftReady": "tobias"
+        },
+        "action": "tip",
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡Eli! Justo a tiempo. Con el ánimo que hay, hasta el hacha corta sola."
+          },
+          {
+            "speaker": "npc",
+            "text": "Ayer encontré un mapa viejo en el bolsillo de un muerto. Hay un alijo enterrado por esos pagos. Te lo he marcado en el mapa."
+          },
+          {
+            "speaker": "player",
+            "text": "Gracias, Tobías. Se lo repartiré con el campamento."
+          },
+          {
+            "speaker": "npc",
+            "text": "Eso es lo que hace fuerte a una banda, muchacho."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "high"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Con esta moral da gusto trabajar. Ya tengo leña para tres inviernos."
+          },
+          {
+            "speaker": "npc",
+            "text": "Sigue así, Eli. Un campamento contento es un campamento que dura."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "mid"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Corto leña para el invierno. Cada hachazo cuenta."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si echas unas monedas en la Caja de Contribuciones, la gente lo nota. Y el Libro de Contabilidad dice qué mejoras podemos pagar."
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Con la moral por los suelos, hasta el hacha pesa el doble."
+          },
+          {
+            "speaker": "npc",
+            "text": "Mira, no te pido milagros. Una moneda en la caja, una piel a la olla… y la gente vuelve a sonreír."
+          }
+        ]
+      }
+    ],
+    "rosa": [
+      {
+        "when": {
+          "moraleTier": "high",
+          "giftReady": "rosa"
+        },
+        "action": "gift:rosa",
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "¡Ay, Eli! Mira qué cara de contento tiene todo el mundo."
+          },
+          {
+            "speaker": "npc",
+            "text": "Te guardé un frasco de mi tónico de raíces. Toma, y no te lo bebas por gusto."
+          },
+          {
+            "speaker": "player",
+            "text": "Rosa, eres un tesoro."
+          },
+          {
+            "speaker": "npc",
+            "text": "Anda, anda… y tráeme venado, que el estofado no se hace solo."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "high"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Hoy hay estofado y canción. Hacía meses que no cantábamos."
+          },
+          {
+            "speaker": "npc",
+            "text": "Sea lo que sea que hayas hecho, sigue haciéndolo."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "mid"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Remuevo la olla y rezo para que no falte harina."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si puedes dejar algo en la caja, mejor. Dicen que con el botiquín del Libro de Contabilidad dejaríamos de sufrir."
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "No hay ánimo ni para cantar. Los niños preguntan por qué comemos tan poco."
+          },
+          {
+            "speaker": "npc",
+            "text": "Haz lo que puedas, Eli. Una piel, unas monedas… algo."
+          }
+        ]
+      }
+    ],
+    "jim": [
+      {
+        "when": {
+          "moraleTier": "high",
+          "giftReady": "jim"
+        },
+        "action": "gift:jim",
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Eli. Desde que la moral subió se me acumulan cartuchos de más."
+          },
+          {
+            "speaker": "npc",
+            "text": "Toma diez. Y recuerda: dispara quieto, y dispara una vez."
+          },
+          {
+            "speaker": "player",
+            "text": "Gracias, Jim."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "high"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Todo en calma. Con este ánimo, el que se acerque se lo piensa dos veces."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si quieres ver mejor el valle, usa el mapa con [M]."
+          }
+        ]
+      },
+      {
+        "when": {
+          "moraleTier": "mid"
+        },
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Vigilo. Por el camino del sureste suben viajeros, y no todos vienen en paz."
+          },
+          {
+            "speaker": "npc",
+            "text": "Un campamento con buena carreta de municiones aguanta un asalto. Pregúntale al Libro de Contabilidad."
+          }
+        ]
+      },
+      {
+        "lines": [
+          {
+            "speaker": "npc",
+            "text": "Me quedo despierto porque nadie más lo hace. Estamos débiles, Eli."
+          },
+          {
+            "speaker": "npc",
+            "text": "Si cae la moral del todo, se me van los hombres. Haz algo."
           }
         ]
       }

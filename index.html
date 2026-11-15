@@ -188,6 +188,22 @@
   .contract .ds { font-size:14px; margin-top:4px; } .contract .rw { font-size:15px; margin-top:4px; color:#5a2a14; }
   .contract.done { opacity:.5; } .contract .btns { display:flex; flex-direction:column; gap:6px; }
   body.shopping #hud { opacity:.25; }
+  /* ---------- Fase 4: moral, campamento, mapa ---------- */
+  #morale { position:absolute; left:calc(50% + 156px); top:12px; font-size:13px; letter-spacing:1px; padding:3px 10px; border-left:3px solid var(--gold); background:linear-gradient(90deg, rgba(18,14,10,.8), rgba(18,14,10,0)); opacity:0; transition:opacity .5s; white-space:nowrap; }
+  #morale.show { opacity:.95; } #morale b { color:var(--gold); margin-left:4px; } #morale .mi { font-size:16px; }
+  #camp { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(.96); width:min(760px, calc(100vw - 32px)); max-height:calc(100vh - 40px); overflow:auto; z-index:45;
+    padding:22px 26px; color:#2b1d10; background:linear-gradient(160deg, #e9dcb9, #d4c193); border:2px solid #6b4f2a; box-shadow:0 10px 50px rgba(0,0,0,.7);
+    opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; }
+  #camp.open { opacity:1; pointer-events:auto; transform:translate(-50%,-50%) scale(1); }
+  #camp .shop-title { font-family:'Rye', serif; font-size:26px; border-bottom:2px solid #6b4f2a; padding-bottom:6px; }
+  #camp .camp-sub { font-style:italic; margin:8px 0 4px; opacity:.85; } #camp .camp-info { font-size:16px; margin:8px 0; }
+  #camp .morale-bar { height:12px; border:1px solid #3a2410; border-radius:7px; background:rgba(60,40,20,.25); overflow:hidden; }
+  #camp .mb-fill { height:100%; background:linear-gradient(90deg,#8d3a22,#d6a35a,#7fa05a); transition:width .4s; }
+  #camp h3 { font-family:'Rye', serif; font-weight:normal; font-size:17px; margin-top:14px; }
+  #camp .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; } #camp .btns .sbtn { margin-left:0; }
+  #worldmap { position:fixed; inset:0; z-index:44; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(8,5,2,.82); }
+  #map-canvas { max-width:94vw; max-height:88vh; aspect-ratio:1; box-shadow:0 10px 60px #000; cursor:pointer; }
+  #map-hint { margin-top:10px; font:13px Arial, sans-serif; opacity:.75; text-align:center; max-width:90vw; }
   .hidden { display:none !important; }
 </style>
 <script type="importmap">
@@ -200,6 +216,7 @@
 
 <div id="hud">
   <div id="clock"><span id="clock-icon">☀</span> <span id="clock-time">--:--</span></div>
+  <div id="morale"></div>
   <div id="honor">
     <div class="hb-top"><span id="honor-tier">Forastero</span><span id="honor-delta"></span></div>
     <div class="hb-bar"><div class="hb-mark" id="honor-mark" style="left:50%"></div>
@@ -241,6 +258,15 @@
   <h3>Comprar</h3><div class="shop-buy"></div>
   <div class="shop-foot"><button class="sbtn" data-action="sellAll">Vender todas las pieles</button><span class="hint">[E] / [Esc] salir</span><button class="sbtn" data-action="close">Cerrar</button></div>
 </div>
+<div id="camp">
+  <div class="shop-title"></div><div class="camp-sub"></div>
+  <div class="morale-bar"><div class="mb-fill" style="width:50%"></div></div>
+  <div class="camp-info"></div>
+  <div class="camp-donate"><h3>Donar al campamento</h3><div class="btns"></div></div>
+  <div class="camp-ledger"><h3>Mejoras permanentes</h3><div class="camp-ups"></div></div>
+  <div class="shop-foot"><span class="hint">[E] / [Esc] salir</span><button class="sbtn" data-action="close">Cerrar</button></div>
+</div>
+<div id="worldmap" class="hidden"><canvas id="map-canvas" width="760" height="760"></canvas><div id="map-hint"></div></div>
 <div id="board">
   <div class="shop-title"></div><div class="board-sub"></div><div class="board-info"></div>
   <div class="board-list"></div>
@@ -250,7 +276,7 @@
 
 <div class="overlay" id="overlay-start">
   <h1>The Last Horizon</h1>
-  <div class="sub">Capítulo I · Valle de Cedar Hollow — Fase 3: Redwood Gulch</div>
+  <div class="sub">Capítulo I · Valle de Cedar Hollow — Fase 4: campamento vivo, clima y caminos</div>
   <div class="controls">
     <div><span class="key">W A S D</span> Moverse</div><div><span class="key">Shift</span> Correr</div>
     <div><span class="key">Ratón</span> Cámara</div><div><span class="key">Clic der.</span> Apuntar</div>
@@ -258,8 +284,8 @@
     <div><span class="key">E</span> Interactuar</div><div><span class="key">Tab</span> Alforjas</div>
     <div><span class="key">F</span> Montar / desmontar</div><div><span class="key">H</span> Silbar al caballo</div>
     <div><span class="key">V</span> Instinto de cazador</div><div><span class="key">Ctrl</span> Paso (a caballo)</div>
-    <div><span class="key">Q</span> Beber tónico</div><div><span class="key">T</span> Acelerar el tiempo</div>
-    <div><span class="key">Esc</span> Pausa</div><div></div>
+    <div><span class="key">Q</span> Beber tónico</div><div><span class="key">M</span> Mapa y viaje rápido</div>
+    <div><span class="key">T</span> Acelerar el tiempo</div><div><span class="key">Esc</span> Pausa</div>
   </div>
   <div class="btn-row"><button class="btn" id="btn-start">CABALGAR</button><button class="btn secondary hidden" id="btn-new">NUEVA PARTIDA</button></div>
   <div class="note" id="loading-note">Cargando el valle… (si no avanza, ábrelo desde un servidor web: GitHub Pages o «python -m http.server»)</div>

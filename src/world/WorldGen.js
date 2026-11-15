@@ -24,6 +24,15 @@ class WorldGen {
     const C = CONFIG.CANYON, xs = C.path.map((p) => p[0]), zs = C.path.map((p) => p[1]), m = C.width * 2.8;
     this.canyonBox = { x0: Math.min(...xs) - m, x1: Math.max(...xs) + m, z0: Math.min(...zs) - m, z1: Math.max(...zs) + m };
     this._cs = { d: 0, u: 0 };
+    // Arroyo (Fase 4): una sola recta perpendicular al camino al pueblo, cruzándolo en CREEK.x/z.
+    const K = CONFIG.CREEK, rd = CONFIG.ROAD_TOWN;
+    let best = Infinity, seg = 0;
+    for (let i = 0; i < rd.length - 1; i++) {   // segmento del camino más cercano al cruce
+      const mx = (rd[i][0] + rd[i + 1][0]) / 2, mz = (rd[i][1] + rd[i + 1][1]) / 2, d = Math.hypot(mx - K.x, mz - K.z);
+      if (d < best) { best = d; seg = i; }
+    }
+    const rx = rd[seg + 1][0] - rd[seg][0], rz = rd[seg + 1][1] - rd[seg][1], rl = Math.hypot(rx, rz);
+    this.creek = { x: K.x, z: K.z, dx: -rz / rl, dz: rx / rl, roadDx: rx / rl, roadDz: rz / rl };   // dx,dz = eje del arroyo
     this.flatZones.forEach((f) => { f.h = this._smoothHeight(f.x, f.z) + this.noise.fbm(f.x * 0.03 + 100, f.z * 0.03 - 50, 2) * 1.6; });
   }
 
@@ -84,10 +93,30 @@ class WorldGen {
     this._cs.d = best; this._cs.u = bu;
     return this._cs;
   }
+  // Distancia al camino al pueblo (solo ROAD_TOWN): lo usan los eventos del camino.
+  townRoadDistance(x, z) {
+    const r = CONFIG.ROAD_TOWN;
+    let best = Infinity;
+    for (let i = 0; i < r.length - 1; i++) {
+      const ax = r[i][0], az = r[i][1], vx = r[i + 1][0] - ax, vz = r[i + 1][1] - az, wx = x - ax, wz = z - az;
+      const t = clamp((wx * vx + wz * vz) / (vx * vx + vz * vz), 0, 1), d = Math.hypot(wx - vx * t, wz - vz * t);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+  // Profundidad del arroyo en (x,z) (0 = sin arroyo). El puente cruza por encima: su tablero lo aporta World.getHeightAt.
+  creekDepth(x, z) {
+    const K = CONFIG.CREEK, c = this.creek, ox = x - c.x, oz = z - c.z;
+    const u = ox * c.dx + oz * c.dz, d = Math.abs(ox * c.roadDx + oz * c.roadDz);   // u: a lo largo del arroyo, d: distancia a su eje
+    if (d > K.width * 1.4 || Math.abs(u) > K.halfLen) return 0;
+    const bank = 1 - smoothstep(K.width * 0.35, K.width * 1.3, d), ends = 1 - smoothstep(K.halfLen * 0.6, K.halfLen, Math.abs(u));
+    return K.depth * bank * ends;
+  }
   heightFn(x, z) {
     let h = this._rawHeight(x, z);
     const rd = this.roadDistance(x, z);
     if (rd < 10) h = lerp(h, this._smoothHeight(x, z) + 0.6, smoothstep(10, 3, rd) * 0.8);
+    if (Math.abs(x - this.creek.x) < 140 && Math.abs(z - this.creek.z) < 140) h -= this.creekDepth(x, z);
     const B = this.canyonBox;
     if (x > B.x0 && x < B.x1 && z > B.z0 && z < B.z1) {
       const C = CONFIG.CANYON, W = C.width, s = this.canyonSample(x, z);

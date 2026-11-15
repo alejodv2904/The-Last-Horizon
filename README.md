@@ -25,6 +25,13 @@ Videojuego 3D de mundo abierto del Viejo Oeste en tercera persona, para navegado
 - **Salud con regeneración lenta** y **tónicos** consumibles desde las Alforjas (`Tab` + `1-9`) o con `Q`; el HUD indica la dirección de cada disparo recibido.
 - **Tablón de recompensas** junto a la oficina del sheriff: contratos de cazarrecompensas (cabecilla vivo o muerto, limpiar campamentos) y **2 misiones secundarias narrativas** (*El fugitivo del establo* y *La deuda de Clara*) con diálogos en JSON cuyas decisiones cambian el Honor.
 
+**Fase 4: campamento vivo, clima y caminos con vida:**
+- **Campamento vivo**: Tobías corta leña, Rosa cocina y Jim patrulla de día; al anochecer se sientan en la fogata, de madrugada duermen en las tiendas (Jim hace guardia) y con tormenta todos se refugian. Cada uno tiene diálogos según la **moral** del campamento.
+- **Caja de Contribuciones y Libro de Contabilidad** (`E`): dona dinero o pieles, y gasta los fondos en mejoras permanentes: *Carreta de Municiones* (munición gratis), *Botiquín de Campamento* (tónicos gratis) y *Tienda Mejorada* (+16 de capacidad en las Alforjas y viaje rápido). Con la moral alta, los compañeros regalan munición, tónicos o pistas de alijos.
+- **Clima dinámico**: Despejado, Nublado, Niebla densa y Tormenta eléctrica con transiciones suaves; lluvia en GPU que sigue a la cámara, rayos con destellos en la luz, truenos retardados por la distancia y lluvia sintetizada. Los ciudadanos se refugian bajo techo; la niebla y la lluvia reducen la visión de los bandidos.
+- **Encuentros en el camino** (a caballo, con enfriamiento): viajero mordido por una serpiente (dale un tónico → Honor y recompensa en la tienda de Hattie), emboscada en el puente sobre el arroyo, prisionero encadenado que pide que le dispares a los grilletes (¿inocente o culpable? afecta el Honor y revela un alijo), y los asaltos genéricos.
+- **Mapa mundial** (`M`): pergamino 2D con niebla de exploración; con la Tienda Mejorada, clic en un lugar descubierto para el **viaje rápido** con transición cinematográfica.
+
 ## Cómo ejecutarlo en local
 
 Usa módulos ES, así que necesita un servidor (con doble clic no carga):
@@ -47,6 +54,7 @@ y abre `http://localhost:8765`.
 | R | Recargar |
 | E | Hablar, despellejar, comerciar, saludar, tablón, atar prisioneros |
 | Q | Beber el mejor tónico |
+| M | Mapa mundial / viaje rápido |
 | 1-9 (con las Alforjas abiertas) | Usar el objeto consumible indicado |
 | F | Montar / desmontar |
 | H | Silbar al caballo |
@@ -63,24 +71,29 @@ data/
   story/chapter1.json      misiones (incl. finales), diálogos cinematográficos, objetos, PNJ
   shop.json                catálogo de Jonás Pike
   shop_general.json        catálogo de la tienda de Hattie Bell (tónicos, munición)
+  world.json               clima, campamento (mejoras), alijos, textos de encuentros
   town.json                honor (umbrales, descuentos), delitos, frases, ciudadanos y sus rutas
   bounties.json            contratos del tablón de recompensas
 src/
   main.js                  carga los JSON y arranca Game
   core/      Game, Config, EventBus, InputManager, MathUtils
   render/    GeometryKit (geometría low-poly + materiales), ParticleSystem
-  world/     WorldManager (colisiones, segmentos 3D), WorldGen (altura, biomas, caminos, cañón), ChunkManager,
+  world/     WorldManager (colisiones, segmentos 3D), WorldGen (altura, biomas, caminos, cañón, arroyo), ChunkManager,
+             WeatherSystem (clima + lluvia GPU), Bridge, CampLifeBuilder,
              Structures, TownBuilder (pueblo), BanditCamps, TimeOfDay
-  entities/  PlayerController, Horse, NPC, Citizen, CharacterFactory
-  ai/        Animal, Deer, Wolf, WildlifeAI · Gunman (FSM táctica), BanditSystem, AmbushDirector, Projectiles
+  entities/  PlayerController, Horse, NPC, Citizen, Companion, CharacterFactory
+  ai/        Animal, Deer, Wolf, WildlifeAI · Gunman (FSM táctica), BanditSystem, AmbushDirector, EncounterDirector, Projectiles
   systems/   MissionSystem, DialogueSystem, Inventory, ShopSystem, SaveSystem, HunterInstinct, AudioSynthesizer,
-             HonorSystem, LawSystem, TownLife, BountySystem, Loot
+             HonorSystem, LawSystem, TownLife, BountySystem, Loot, CampSystem, TreasureSystem, MapSystem
   ui/        UIManager
 ```
 
 Los sistemas se comunican por `EventBus` (`gunshot`, `animal:killed`, `bandit:killed`, `inventory:changed`, `flag:set`, `honor:changed`), así que añadir pueblos, bandas o capítulos no obliga a tocar los sistemas existentes.
 
 ### Rendimiento (objetivo: 60 FPS en equipos modestos)
+
+- **Lluvia**: 1 `LineSegments` (2400 gotas) + 1 `Points` (salpicaduras) con las gotas calculadas en el *vertex shader* a partir del tiempo y la posición de la cámara (módulo sobre una caja que la sigue): 0 coste de CPU por gota, solo se actualizan 4 uniformes, y la malla se oculta cuando no llueve.
+- **Eventos aleatorios sin objetos huérfanos**: los actores (2 personas, grilletes, 3 bandidos, cajas de barricada) se crean UNA vez y se reutilizan (pool); `start()` solo coloca y `end()` oculta, apaga colisiones y vacía referencias; no hay `setTimeout` ni listeners por evento (los truenos usan una cola con cuenta atrás). Una prueba automática comprueba que tras 16 encuentros y una tormenta el número de nodos de escena, geometrías, texturas, zonas y listeners es idéntico.
 
 - **Colisiones**: los edificios son cajas AABB (no se colisiona contra la malla). El pueblo y cada campamento viven en una *zona* con círculo envolvente: fuera de él, el coste es una sola comparación. Los disparos y la línea de visión usan intersecciones analíticas segmento-círculo/caja (con altura: se dispara por encima de una caja baja) más un muestreo del terreno cada 3 m; sin `Raycaster` por frame.
 - **IA de cobertura**: decisiones a 4-5 Hz y escalonadas; el punto de cobertura se calcula como *centro del obstáculo + dirección(jugador→obstáculo)*, y basta una comprobación geométrica para saber si sigue protegiendo. Solo se hace UNA comprobación de visión al asomarse. «Fichas de disparo» (máx. 2 tiradores) y LOD de IA (los pistoleros a más de 240 m duermen).

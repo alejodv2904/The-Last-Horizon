@@ -17,7 +17,7 @@ const rr = (a, b) => a + Math.random() * (b - a);
 class AmbushDirector {
   constructor(game, bandits) {
     this.game = game; this.bandits = bandits;
-    this.state = 'idle'; this.timer = A.FIRST_DELAY; this.t = 0; this.kind = null; this.center = new THREE.Vector3(); this.reward = null;
+    this.state = 'idle'; this.auto = true; this.timer = A.FIRST_DELAY; this.t = 0; this.kind = null; this.center = new THREE.Vector3(); this.reward = null;
     this.members = [0, 1, 2].map((i) => bandits.addGunman({ id: `amb_${i}`, name: `${NAMES[i]}`, faction: 'bandit', palette: PALS[i], x: 0, z: -2000, camp: 'ambush', active: false }));
     this.members.forEach((m) => { m.root.visible = false; });
     // viajero (humanoide lite) y cajas de la barricada
@@ -37,7 +37,7 @@ class AmbushDirector {
     const g = this.game, p = g.player;
     if (this.state === 'rescue') this._poseTraveler();
     if (this.state === 'idle') {
-      if (!g.started || g.mode !== 'explore') return;
+      if (!this.auto || !g.started || g.mode !== 'explore') return;
       this.timer -= dt;
       if (this.timer > 0) return;
       const onRoad = g.world.gen.roadDistance(p.position.x, p.position.z) < 12, moving = (p.riding ? g.horse.speed : p.velocity.length()) > 1.5;
@@ -76,7 +76,13 @@ class AmbushDirector {
     return false;
   }
 
-  _spawn(cx, cz, ang) {
+  // Inicio dirigido por el EncounterDirector en un lugar concreto (p. ej. el puente): opts = { positions, crates, center }
+  begin(kind, opts) {
+    if (this.state !== 'idle') return false;
+    this.kind = kind; this._spawn(opts.center.x, opts.center.z, 0, opts);
+    return true;
+  }
+  _spawn(cx, cz, ang, opts = null) {
     const g = this.game, w = g.world, p = g.player.position, toP = Math.atan2(p.x - cx, p.z - cz);
     this.state = this.kind; this.t = 0; this.done = false; this.doneT = 0;
     this.center.set(cx, w.getHeightAt(cx, cz), cz);
@@ -92,16 +98,19 @@ class AmbushDirector {
       this.members.forEach((m, i) => {
         const side = (i - 1) * rr(7, 10), back = i === 1 ? 4 : 0;
         let x = cx + rx * side - fx * back, z = cz + rz * side - fz * back;
-        if (!free(x, z, 0.8)) { x += rx * 2; z += rz * 2; }
-        const mx = x + fx * 2.0, mz = z + fz * 2.0;
+        if (!opts && !free(x, z, 0.8)) { x += rx * 2; z += rz * 2; }
+        let mx = x + fx * 2.0, mz = z + fz * 2.0;
+        if (opts) { x = opts.positions[i].x; z = opts.positions[i].z; mx = opts.crates[i].x; mz = opts.crates[i].z; }
         if (free(mx, mz, 0.6)) crateAt(i, mx, mz, 1.0); else this.crates.setMatrixAt(i, _zero);
         this._place(m, x, z);
         m.def.holdTarget = null; m.def.spot = { x, z }; m.def.look = p;
       });
-      for (let i = 3; i < 6; i++) { const x = cx + rx * (i - 4) * 2.4 + fx * 5, z = cz + rz * (i - 4) * 2.4 + fz * 5; if (free(x, z, 0.7)) crateAt(i, x, z, 0.9); else this.crates.setMatrixAt(i, _zero); }
-      this.members.forEach((m, i) => m.alertTo(p, 2.0 + i * 0.5));
-      g.ui.notify('¡Emboscada!', 'Bandidos en el camino, adelante. Busca cobertura.');
-      g.ui.bark('Bandido', '¡Ahí viene! ¡Dispárenle!');
+      for (let i = 3; i < 6; i++) { if (opts) { this.crates.setMatrixAt(i, _zero); continue; } const x = cx + rx * (i - 4) * 2.4 + fx * 5, z = cz + rz * (i - 4) * 2.4 + fz * 5; if (free(x, z, 0.7)) crateAt(i, x, z, 0.9); else this.crates.setMatrixAt(i, _zero); }
+      if (!opts) {   // emboscada de camino: te atacan enseguida. En el puente esperan quietos y atacan al verte u oírte.
+        this.members.forEach((m, i) => m.alertTo(p, 2.0 + i * 0.5));
+        g.ui.notify('¡Emboscada!', 'Bandidos en el camino, adelante. Busca cobertura.');
+        g.ui.bark('Bandido', '¡Ahí viene! ¡Dispárenle!');
+      }
     } else {
       // asalto a un viajero: 2 bandidos lo encañonan; el 3.º no se usa
       this.trav.position.copy(this.center); this.trav.heading = toP + Math.PI; this.trav.hands = 1; this.trav.thanks = 0;

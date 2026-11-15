@@ -1,0 +1,69 @@
+{
+  "weather": {
+    "states": {
+      "clear":  { "name": "Despejado", "icon": "☀", "cover": 0.0, "fog": 0.0, "rain": 0.0, "wind": 0.3 },
+      "cloudy": { "name": "Nublado", "icon": "☁", "cover": 0.6, "fog": 0.08, "rain": 0.0, "wind": 0.55 },
+      "fog":    { "name": "Niebla densa", "icon": "≈", "cover": 0.5, "fog": 1.0, "rain": 0.0, "wind": 0.12 },
+      "storm":  { "name": "Tormenta eléctrica", "icon": "⚡", "cover": 1.0, "fog": 0.3, "rain": 1.0, "wind": 1.0 }
+    },
+    "next": {
+      "clear": { "cloudy": 0.7, "fog": 0.3 },
+      "cloudy": { "clear": 0.35, "fog": 0.2, "storm": 0.45 },
+      "fog": { "clear": 0.5, "cloudy": 0.5 },
+      "storm": { "cloudy": 1.0 }
+    },
+    "duration": [140, 280],
+    "transition": [22, 38],
+    "firstDelay": [110, 170],
+    "announce": {
+      "cloudy": "Se cubre el cielo.",
+      "fog": "Una niebla densa cae sobre el valle.",
+      "storm": "Se acerca una tormenta eléctrica. Busca refugio.",
+      "clear": "El cielo se despeja."
+    }
+  },
+  "camp": {
+    "name": "Campamento de Cedar Hollow",
+    "tiers": [
+      { "id": "low", "name": "Abatida", "max": 34 },
+      { "id": "mid", "name": "Tranquila", "max": 64 },
+      { "id": "high", "name": "Animada", "max": 100 }
+    ],
+    "pelt": { "deer_pelt": 3.4, "wolf_pelt": 5.2, "buck_antlers": 2.4 },
+    "gifts": {
+      "jim": { "type": "ammo", "amount": 10, "cooldown": 300 },
+      "rosa": { "type": "item", "id": "tonic", "amount": 1, "cooldown": 300 },
+      "tobias": { "type": "tip", "cooldown": 360 }
+    },
+    "upgrades": [
+      { "id": "ammo_wagon", "name": "Carreta de Municiones", "icon": "🔸", "cost": 25, "desc": "Reponer munición gratis en la carreta (hasta 40 cartuchos, una vez por minuto)." },
+      { "id": "medkit", "name": "Botiquín de Campamento", "icon": "🧪", "cost": 30, "desc": "Tónicos gratis: el botiquín repone uno cada 90 s (hasta 3 guardados)." },
+      { "id": "tent", "name": "Tienda Mejorada", "icon": "⛺", "cost": 60, "desc": "+16 de capacidad en las Alforjas y viaje rápido desde el mapa (M) a los lugares descubiertos." }
+    ]
+  },
+  "treasures": [
+    { "id": "t_roble", "name": "Alijo del roble solitario", "x": -95, "z": -140, "money": [12, 22], "items": { "ammo": 8, "tonic": 1 } },
+    { "id": "t_roca", "name": "Alijo bajo la roca partida", "x": 190, "z": -80, "money": [15, 28], "items": { "tonic_strong": 1 } },
+    { "id": "t_arroyo", "name": "Alijo del vado seco", "x": -250, "z": 260, "money": [10, 20], "items": { "ammo": 12 } },
+    { "id": "t_pinar", "name": "Alijo del pinar quemado", "x": 310, "z": -300, "money": [20, 34], "items": { "tonic": 2 } }
+  ],
+  "encounters": {
+    "snake": {
+      "names": ["Eustace Pike", "Walter Dunn"],
+      "cry": ["¡Una serpiente me ha mordido! ¡Un tónico, por Dios!", "¡Me muero! ¡Tiene que haber un tónico…!"],
+      "noTonic": "No llevas ningún tónico. Cómpralos en la tienda de Hattie.",
+      "thanks": "¡Gracias, forastero! Pasa por la tienda de Hattie: se lo contaré, es prima mía.",
+      "honor": 4,
+      "shopGift": { "money": 6, "items": { "ammo": 12, "tonic": 1 }, "text": "Hattie te agradece lo del viajero mordido: «Mi primo Eustace me lo contó todo. Esto es de la casa.»" }
+    },
+    "prisoner": {
+      "name": "Prisionero fugado",
+      "innocentCry": ["¡Soy inocente! ¡Me tendieron una trampa! ¡Dispara a las cadenas!", "¡No hice nada! ¡Por favor, rompe los grilletes!"],
+      "guiltyCry": ["¡Rápido, dispara a las cadenas y te haré rico!", "¡Eh, forastero! Rompe esto y te cuento dónde está el botín."],
+      "freed": "¡Libre! Hay un alijo enterrado… lo he marcado en tu mapa. ¡Suerte!",
+      "freedNoStash": "¡Libre! Toma lo poco que me queda.",
+      "honorInnocent": 5, "honorGuilty": -5, "honorKilled": -10
+    },
+    "bridge": { "cry": "¡Alto ahí! ¡Este puente tiene peaje… de plomo!" }
+  }
+}

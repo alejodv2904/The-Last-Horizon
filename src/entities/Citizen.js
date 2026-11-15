@@ -75,7 +75,10 @@ class Citizen {
 
     // --- reacciones (por orden de prioridad) ---
     const st = this.state;
-    if (st !== 'flee' && st !== 'inside' && st !== 'cower') {
+    if (c.rain > 0.35 && (st === 'walk' || st === 'stand' || st === 'greet')) {   // llueve: a refugiarse bajo techo
+      this.door = this.life.pickDoor(this.position, this.position); this.state = 'shelter'; this.timer = 0;
+    }
+    if (st !== 'flee' && st !== 'inside' && st !== 'cower' && st !== 'shelter') {
       if (this.life.panic > 0 && p.distanceTo(this.life.panicPos) < 58) {
         if (this.bold && p.distanceTo(this.life.panicPos) > 10) { this.state = 'alarm'; this.alarmT = 0; }
         else if (p.distanceTo(this.life.panicPos) < 7) this.cower(rr(6, 10)); else this.flee();
@@ -84,7 +87,12 @@ class Citizen {
     }
 
     switch (this.state) {
-      case 'inside': this.timer -= dt; if (this.timer <= 0 && this.life.panic <= 0 && !c.weaponDrawn && g.law.level === 0) this._emerge(); break;
+      case 'inside': this.timer -= dt; if (this.timer <= 0 && this.life.panic <= 0 && !c.weaponDrawn && g.law.level === 0 && c.rain < 0.12) this._emerge(); break;
+      case 'shelter': {   // camina deprisa hacia la puerta más cercana y entra
+        const d = this._step(this.door.x, this.door.z, 2.9, dt, 7); moving = true; this.timer += dt;
+        if (d < 0.8 || this.timer > 14) { this.state = 'inside'; this.timer = rr(6, 12); this.root.visible = false; }
+        break;
+      }
       case 'flee': {
         const d = this._step(this.door.x, this.door.z, 5.4, dt, 10); moving = true;
         if (d < 0.8 || this.timer > 9) { this.state = 'inside'; this.timer = rr(14, 26); this.root.visible = false; }

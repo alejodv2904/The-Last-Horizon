@@ -142,7 +142,7 @@ class BanditSystem {
 
   update(dt) {
     const game = this.game, pp = game.player.position, ctx = this._ctx;
-    ctx.pp = pp; ctx.night = game.world.time.state.night; ctx.playerDead = game.mode === 'dead';
+    ctx.pp = pp; ctx.night = game.world.time.state.night; ctx.playerDead = game.mode === 'dead'; ctx.vis = game.world.weather.visibility;
     this.projectiles.update(dt);
     let active = 0;
     for (const g of this.gunmen) {

@@ -75,7 +75,7 @@ class Gunman {
   }
   _detectRange(ctx) {
     const p = this.game.player;
-    let r = B.DETECT * (ctx.night > 0.5 ? 0.78 : 1);
+    let r = B.DETECT * (ctx.night > 0.5 ? 0.78 : 1) * (ctx.vis ?? 1);
     if (p.riding) r += 8; if (p.isRunning) r += 8; if (p.isAiming) r *= 0.85;
     return r;
   }

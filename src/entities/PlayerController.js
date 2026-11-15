@@ -286,7 +286,7 @@ class PlayerController {
     const tT = g.world.raycastTerrain(origin, dir, maxDist);
     if (tT < best.dist) best = { dist: tT, point: origin.clone().addScaledVector(dir, tT), type: 'terrain', animal: null, actor: null, object: null };
     this.raycaster.set(origin, dir); this.raycaster.near = 0.5; this.raycaster.far = best.dist;
-    const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.bandits.getHitboxes(), ...g.townLife.getHitboxes(), ...g.world.solidTargets], false);
+    const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.bandits.getHitboxes(), ...g.townLife.getHitboxes(), ...g.encounters.getHitboxes(), ...g.world.solidTargets], false);
     if (hits.length) {
       const h = hits[0], animal = h.object.userData.animal || null, actor = h.object.userData.actor || null;
       best = { dist: h.distance, point: h.point.clone(), type: animal ? 'animal' : actor ? 'actor' : 'object', animal, actor, object: h.object };

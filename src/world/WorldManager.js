@@ -9,16 +9,20 @@ import { ChunkManager } from './ChunkManager.js';
 import { buildCamp, buildTradingPost } from './Structures.js';
 import { buildTown } from './TownBuilder.js';
 import { buildBanditCamp } from './BanditCamps.js';
+import { WeatherSystem } from './WeatherSystem.js';
+import { buildBridge } from './Bridge.js';
+import { buildCampLife } from './CampLifeBuilder.js';
 
 const _v = new THREE.Vector3();
 const _lanternColor = new THREE.Color(0xffc070);
 
 class WorldManager {
   constructor(game) {
-    this.game = game; this.scene = game.scene;
+    this.game = game; this.scene = game.scene; this.windTime = 0;
     this.gen = new WorldGen(9137);
     this.noise = this.gen.noise;
     this.staticObstacles = [];
+    this.bridgeDeck = null;
     this.zones = [];            // Fase 3: zonas con colisión propia (pueblo, campamentos, emboscadas)
     this.solidTargets = [];
     this.flags = new Set();
@@ -32,12 +36,26 @@ class WorldManager {
     this.camp = buildCamp(this);
     this.firePos = this.camp.firePos;
     this.post = buildTradingPost(this);
+    this.bridge = buildBridge(this);
+    this.campLife = buildCampLife(this);
+    this.weather = new WeatherSystem(game, game.worldData.weather);
     this.town = buildTown(this);
     this.banditCamps = CONFIG.BANDIT_CAMPS.map((def) => buildBanditCamp(this, def));
     this.chunks.update({ x: CONFIG.PLAYER_SPAWN.x, z: CONFIG.PLAYER_SPAWN.z }, true);
   }
 
-  getHeightAt(x, z) { return this.gen.getHeightAt(x, z); }
+  // Altura del suelo: terreno, o el tablero del puente si (x,z) cae sobre él (lo usan jugador, caballo, animales y balas).
+  getHeightAt(x, z) {
+    const b = this.bridgeDeck;
+    if (b) {
+      const dx = x - b.x, dz = z - b.z;
+      if (dx * dx + dz * dz < b.r2) {
+        const along = dx * b.rx + dz * b.rz, lat = dx * b.lx + dz * b.lz;
+        if (along > -b.halfL && along < b.halfL && lat > -b.halfW && lat < b.halfW) return b.y0 + along * b.slope;
+      }
+    }
+    return this.gen.getHeightAt(x, z);
+  }
   getSlopeAt(x, z) { return this.gen.getSlopeAt(x, z); }
   forestWeight(x, z) { return this.gen.forestWeight(x, z); }
 
@@ -81,9 +99,10 @@ class WorldManager {
     return true;
   }
   // Empuja un punto fuera de los obstáculos cercanos (estáticos + zonas + chunk actual). Devuelve true si chocó.
-  pushOut(p, radius) {
+  pushOut(p, radius, ignorePassable = false) {   // ignorePassable: los compañeros atraviesan los troncos de la fogata (son asientos)
     let hit = false;
     const test = (o) => {
+      if (ignorePassable && o.passable) return;
       const dx = p.x - o.x, dz = p.z - o.z, min = o.r + radius;
       if (dx > min || dx < -min || dz > min || dz < -min) return;
       const d2 = dx * dx + dz * dz;
@@ -264,8 +283,10 @@ class WorldManager {
 
   update(dt, playerPos, camera) {
     this.elapsed += dt;
-    MAT.windUniforms.uTime.value = this.elapsed;
     const s = this.time.update(dt);
+    this.weather.update(dt, camera, playerPos, s);   // modula el cielo/luz ya calculados y mueve la lluvia
+    this.windTime += dt * (1 + this.weather.v.wind * 1.6);
+    MAT.windUniforms.uTime.value = this.windTime;
     this.sun.color.copy(s.sun);
     this.sun.intensity = s.sunI * s.lightIntensityScale;
     this.hemi.color.copy(s.hs); this.hemi.groundColor.copy(s.hg); this.hemi.intensity = s.hI;
@@ -273,7 +294,7 @@ class WorldManager {
     const u = this.skyUniforms;
     u.topColor.value.copy(s.top); u.horizonColor.value.copy(s.fog); u.sunColor.value.copy(s.sun);
     u.sunDir.value.copy(s.sunDir); u.moonDir.value.copy(s.moonDir); u.nightFactor.value = s.night;
-    this.starMat.opacity = s.night * 0.9;
+    this.starMat.opacity = s.night * 0.9 * (1 - s.cloud);
     this.stars.rotation.y += dt * 0.004;
     this.skyGroup.position.copy(camera.position);
 
