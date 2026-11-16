@@ -41,9 +41,11 @@ class ParticleSystem {
     this.points.frustumCulled = false;
     scene.add(this.points);
     this._c = new THREE.Color();
+    this._v = new THREE.Vector3(); this._o = {};   // temporales reutilizados por burst(): cero asignaciones por ráfaga
+    this.limit = capacity;                          // tope efectivo (la calidad gráfica lo baja en equipos modestos)
   }
   emit(p, v, o = {}) {
-    const i = this.cursor; this.cursor = (this.cursor + 1) % this.capacity;
+    const i = this.cursor; this.cursor = (this.cursor + 1) % this.limit;
     this.pos[i * 3] = p.x; this.pos[i * 3 + 1] = p.y; this.pos[i * 3 + 2] = p.z;
     this.vel[i * 3] = v.x; this.vel[i * 3 + 1] = v.y; this.vel[i * 3 + 2] = v.z;
     this._c.set(o.color ?? 0xffffff);
@@ -54,10 +56,12 @@ class ParticleSystem {
     this.gravity[i] = o.gravity ?? 0; this.drag[i] = o.drag ?? 0; this.grow[i] = o.grow ?? 0;
   }
   burst(p, count, o) {
-    const v = new THREE.Vector3();
+    const v = this._v, t = this._o;
+    t.color = o.color; t.alpha = o.alpha; t.gravity = o.gravity; t.drag = o.drag; t.grow = o.grow;
     for (let k = 0; k < count; k++) {
       v.set((Math.random() - 0.5) * 2, Math.random() * (o.up ?? 1), (Math.random() - 0.5) * 2).multiplyScalar(o.speed ?? 2);
-      this.emit(p, v, { ...o, life: (o.life ?? 1) * (0.6 + Math.random() * 0.6), size: (o.size ?? 0.2) * (0.6 + Math.random() * 0.8) });
+      t.life = (o.life ?? 1) * (0.6 + Math.random() * 0.6); t.size = (o.size ?? 0.2) * (0.6 + Math.random() * 0.8);
+      this.emit(p, v, t);
     }
   }
   update(dt, camera, renderer) {

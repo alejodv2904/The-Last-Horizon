@@ -20,7 +20,9 @@ class WorldGen {
       { x: CONFIG.TRADING_POST.x, z: CONFIG.TRADING_POST.z, r0: 12, r1: 28, h: 0 },
       { x: CONFIG.TOWN.x, z: CONFIG.TOWN.z, r0: 36, r1: 62, h: 0 },
       ...CONFIG.BANDIT_CAMPS.filter((c) => c.flat).map((c) => ({ x: c.x, z: c.z, r0: 14, r1: 30, h: 0 })),
+      ...Object.entries(CONFIG.CAMP_SITES).filter(([id]) => !id.startsWith('cedar')).map(([, c]) => ({ x: c.x, z: c.z, r0: 15, r1: 32, h: 0 })),
     ];
+    this.infinite = false;   // modo post-juego: sin montañas de borde y con chunks ilimitados
     const C = CONFIG.CANYON, xs = C.path.map((p) => p[0]), zs = C.path.map((p) => p[1]), m = C.width * 2.8;
     this.canyonBox = { x0: Math.min(...xs) - m, x1: Math.max(...xs) + m, z0: Math.min(...zs) - m, z1: Math.max(...zs) + m };
     this._cs = { d: 0, u: 0 };
@@ -39,7 +41,7 @@ class WorldGen {
     return w;
   }
 
-  _edge(x, z) { return Math.max(Math.abs(x), Math.abs(z)) / this.half; }
+  _edge(x, z) { return this.infinite ? 0 : Math.max(Math.abs(x), Math.abs(z)) / this.half; }
   _smoothHeight(x, z) {
     const n = this.noise;
     let h = n.fbm(x * 0.0045, z * 0.0045, 2) * 22;
@@ -97,6 +99,15 @@ class WorldGen {
         h = lerp(h, lerp(base - C.depth, base + C.rim, t), w * smoothstep(0, C.ramp, s.u));
       }
     }
+    for (const m of CONFIG.MOUNTAINS) {   // montañas aditivas (campana gaussiana)
+      const dx = (x - m.x) / m.r, dz = (z - m.z) / m.r, d2 = dx * dx + dz * dz;
+      if (d2 < 9) h += m.h * Math.exp(-d2);
+    }
+    for (const b of CONFIG.BIOMES) {   // el pantano es llano y bajo
+      if (!b.flatten) continue;
+      const w = 1 - smoothstep(b.r * 0.6, b.r * 1.05, Math.hypot(x - b.x, z - b.z));
+      if (w > 0) h = lerp(h, 1.6 + this.noise.fbm(x * 0.05, z * 0.05, 2) * 0.7, w * b.flatten);
+    }
     for (const f of this.flatZones) {
       const d = Math.hypot(x - f.x, z - f.z);
       if (d < f.r1) h = lerp(f.h, h, smoothstep(f.r0, f.r1, d));
@@ -106,7 +117,7 @@ class WorldGen {
 
   // --- Tiles de altura (cacheados para siempre: ~6.7 KB por chunk) ---
   getTile(cx, cz) {
-    const key = cx * 4096 + cz;
+    const key = cx * 131072 + cz;
     if (key === this._lastKey) return this._lastTile;
     let t = this.tiles.get(key);
     if (!t) {
@@ -115,12 +126,15 @@ class WorldGen {
       const x0 = cx * this.size, z0 = cz * this.size;
       for (let iz = 0; iz < n; iz++) for (let ix = 0; ix < n; ix++) t[iz * n + ix] = this.heightFn(x0 + ix * this.cell, z0 + iz * this.cell);
       this.tiles.set(key, t);
+      if (this.infinite && this.tiles.size > 900) {   // modo infinito: descarta los tiles más antiguos para acotar la memoria
+        let n = 0; for (const k of this.tiles.keys()) { if (k === key) continue; this.tiles.delete(k); if (++n >= 250) break; }
+      }
     }
     this._lastKey = key; this._lastTile = t;
     return t;
   }
   getHeightAt(x, z) {
-    x = clamp(x, -this.half, this.half - 0.01); z = clamp(z, -this.half, this.half - 0.01);
+    if (!this.infinite) { x = clamp(x, -this.half, this.half - 0.01); z = clamp(z, -this.half, this.half - 0.01); }
     const cx = Math.floor(x / this.size), cz = Math.floor(z / this.size);
     const t = this.getTile(cx, cz), n = this.res + 1;
     const gx = clamp((x - cx * this.size) / this.cell, 0, this.res - 0.0001);

@@ -14,6 +14,7 @@ const _dummy = new THREE.Object3D();
 const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
 const _col = new THREE.Color(), _tmpC = new THREE.Color();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3();
+const SNOWC = new THREE.Color(0xe6eef2), _bc = new THREE.Color();
 const GROUND = {
   prairieA: new THREE.Color(0xb59d55), prairieB: new THREE.Color(0x9c9a52),
   forestA: new THREE.Color(0x4d6533), forestB: new THREE.Color(0x5e5a3a),
@@ -31,6 +32,9 @@ class ChunkManager {
     this.minC = -Math.round(CONFIG.WORLD_HALF / this.size); this.maxC = -this.minC - 1;
     this.slots = []; this.active = new Map(); this.queue = []; this.center = null;
     this.stats = { builds: 0, lastBuildMs: 0 };
+    // Calidad gráfica: distancia de carga de chunks y densidad de vegetación (instancias por chunk y tipo).
+    this.viewDist = 230; this.cap = { ...CONFIG.VEG_MAX_PER_CHUNK }; this._ex = 1e9; this._ez = 1e9;
+    this.biomes = CONFIG.BIOMES.map((b) => ({ ...b, c0: new THREE.Color(b.ground[0]), c1: new THREE.Color(b.ground[1]) }));
     this._buildVegetationMeshes();
     for (let i = 0; i < 9; i++) this.slots.push(this._createSlot(i));
   }
@@ -101,27 +105,52 @@ class ChunkManager {
 
   _key(cx, cz) { return `${cx},${cz}`; }
 
+  setInfinite(on) {   // modo post-juego: chunks sin límite de mundo
+    this.minC = on ? -4000 : -Math.round(CONFIG.WORLD_HALF / this.size); this.maxC = on ? 4000 : -this.minC - 1;
+    this.world.gen.infinite = on; this.world.gen.tiles.clear(); this.world.gen._lastKey = null;
+    this._ex = 1e9; this.refresh();
+  }
+  // Aplica un preset de calidad: distancia de vista y densidad de vegetación (cap por chunk). Reconstruye los chunks cargados.
+  applyQuality(q) {
+    this.viewDist = q.viewDist;
+    for (const type of VEG_TYPES) {
+      this.cap[type] = Math.max(6, Math.floor(CONFIG.VEG_MAX_PER_CHUNK[type] * q.veg));
+      this.veg[type].count = 9 * this.cap[type];
+    }
+    this.refresh(true);
+  }
+  // Reconstruye todos los chunks cargados (tras un cambio de calidad) y reevalúa el conjunto visible.
+  refresh(full = false) {
+    if (full) {
+      for (const type of VEG_TYPES) {
+        const mesh = this.veg[type], total = CONFIG.VEG_MAX_PER_CHUNK[type] * 9;
+        for (let i = 0; i < total; i++) mesh.setMatrixAt(i, _zero);
+        mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.needsUpdate = true;
+      }
+      for (const slot of this.active.values()) { slot.ready = false; slot.obstacles.length = 0; if (!this.queue.includes(slot)) this.queue.push(slot); }
+    }
+    this._ex = 1e9;
+  }
+
   update(p, force = false) {
     const size = this.size;
     const pcx = clamp(Math.floor(p.x / size), this.minC, this.maxC), pcz = clamp(Math.floor(p.z / size), this.minC, this.maxC);
-    let recenter = !this.center;
-    if (this.center && (pcx !== this.center.cx || pcz !== this.center.cz)) {
-      const x0 = this.center.cx * size, z0 = this.center.cz * size, H = CONFIG.CHUNK_HYSTERESIS;
-      const ox = Math.max(x0 - p.x, p.x - (x0 + size), 0), oz = Math.max(z0 - p.z, p.z - (z0 + size), 0);
-      if (Math.max(ox, oz) > H || Math.abs(pcx - this.center.cx) > 1 || Math.abs(pcz - this.center.cz) > 1) recenter = true;
-    }
-    if (recenter) this._recenter(pcx, pcz);
+    const dx = p.x - this._ex, dz = p.z - this._ez;
+    if (force || !this.center || pcx !== this.center.cx || pcz !== this.center.cz || dx * dx + dz * dz > 100) this._reevaluate(pcx, pcz, p);
     let budget = force ? Infinity : CONFIG.CHUNK_BUILDS_PER_FRAME;
     while (budget-- > 0 && this.queue.length) this._build(this.queue.shift());
   }
 
-  _recenter(ccx, ccz) {
-    this.center = { cx: ccx, cz: ccz };
-    const wanted = new Map();
+  // Conjunto visible = chunk del jugador + vecinos (3x3) cuya caja esté a menos de `viewDist` metros (con histéresis de 30 m).
+  _reevaluate(ccx, ccz, p) {
+    this.center = { cx: ccx, cz: ccz }; this._ex = p.x; this._ez = p.z;
+    const size = this.size, wanted = new Map();
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const cx = ccx + dx, cz = ccz + dz;
       if (cx < this.minC || cx > this.maxC || cz < this.minC || cz > this.maxC) continue;
-      wanted.set(this._key(cx, cz), { cx, cz, d: Math.abs(dx) + Math.abs(dz) });
+      const x0 = cx * size, z0 = cz * size, ox = Math.max(x0 - p.x, p.x - (x0 + size), 0), oz = Math.max(z0 - p.z, p.z - (z0 + size), 0);
+      const key = this._key(cx, cz), d = Math.hypot(ox, oz);
+      if ((dx === 0 && dz === 0) || d < this.viewDist + (this.active.has(key) ? 30 : 0)) wanted.set(key, { cx, cz, d });
     }
     for (const [key, slot] of this.active) if (!wanted.has(key)) { this._release(slot); this.active.delete(key); }
     const free = this.slots.filter((s) => s.key === null);
@@ -138,7 +167,7 @@ class ChunkManager {
     slot.key = null; slot.ready = false; slot.mesh.visible = false; slot.obstacles.length = 0;
     this.queue = this.queue.filter((s) => s !== slot);
     for (const type of VEG_TYPES) {
-      const mesh = this.veg[type], max = CONFIG.VEG_MAX_PER_CHUNK[type], base = slot.index * max;
+      const mesh = this.veg[type], max = this.cap[type], base = slot.index * max;
       for (let i = 0; i < max; i++) mesh.setMatrixAt(base + i, _zero);
       mesh.instanceMatrix.addUpdateRange(base * 16, max * 16);
       mesh.instanceMatrix.needsUpdate = true;
@@ -159,7 +188,27 @@ class ChunkManager {
     let dirt = Math.max(smoothstep(17, 8, dc), smoothstep(15, 7, dt));
     for (const zn of CONFIG.CLEAR_ZONES) dirt = Math.max(dirt, smoothstep(zn.dirt1, zn.dirt0, Math.hypot(x - zn.x, z - zn.z)));
     out.lerp(GROUND.dirt, dirt * 0.9);
+    for (const b of this.biomes) {   // biomas nuevos: pantano, desierto, nieve
+      const w = 1 - smoothstep(b.r * 0.62, b.r * 1.02, Math.hypot(x - b.x, z - b.z));
+      if (w <= 0) continue;
+      _bc.lerpColors(b.c0, b.c1, smoothstep(0.3, 0.75, patch));
+      out.lerp(_bc, w * 0.92);
+      if (b.id === 'snow') out.lerp(SNOWC, w * (0.35 + smoothstep(8, 40, y) * 0.55));
+    }
     out.multiplyScalar(0.93 + rand() * 0.12);
+  }
+  // Multiplicador de densidad de un tipo de vegetación según los biomas que cubren (x, z); 1 = pradera.
+  _vegFactor(type, x, z) {
+    let f = 1;
+    for (const b of this.biomes) {
+      const w = 1 - smoothstep(b.r * 0.62, b.r * 1.02, Math.hypot(x - b.x, z - b.z));
+      if (w > 0) f *= 1 + (b.veg[type] - 1) * w;
+    }
+    return f;
+  }
+  _snowWeight(x, z) {
+    for (const b of this.biomes) if (b.id === 'snow') return 1 - smoothstep(b.r * 0.62, b.r * 1.02, Math.hypot(x - b.x, z - b.z));
+    return 0;
   }
 
   _build(slot) {
@@ -194,7 +243,7 @@ class ChunkManager {
   }
 
   _scatter(slot, rand) {
-    const g = this.gen, size = this.size, max = CONFIG.VEG_MAX_PER_CHUNK;
+    const g = this.gen, size = this.size, max = this.cap;
     const lists = { pine: [], oak: [], rock: [], sage: [], grass: [] };
     const camp = CONFIG.CAMP, tp = CONFIG.TRADING_POST;
     const clear = (x, z, rCamp, rRoad, rHerd) => {
@@ -214,27 +263,28 @@ class ChunkManager {
     };
     attempt('pine', 900, (x, z, r1, r2, r3) => {
       const fw = g.forestWeight(x, z);
-      if (r1 > 0.012 + fw * 0.6 || !clear(x, z, 30, 5.5, 18) || g.getSlopeAt(x, z) < 0.74) return null;
-      return { x, z, s: 0.75 + r2 * 0.75, r: r3 * Math.PI * 2, tint: TINT.pine, tv: 0.1 };
+      if (r1 > (0.012 + fw * 0.6) * this._vegFactor('pine', x, z) || !clear(x, z, 30, 5.5, 18) || g.getSlopeAt(x, z) < 0.74) return null;
+      const sw = this._snowWeight(x, z);
+      return { x, z, s: 0.75 + r2 * 0.75, r: r3 * Math.PI * 2, tint: sw > 0.05 ? TINT.pine.clone().lerp(SNOWC, sw * 0.7) : TINT.pine, tv: 0.1 };
     });
     attempt('oak', 160, (x, z, r1, r2, r3) => {
       const fw = g.forestWeight(x, z);
-      if (r1 > (1 - fw) * 0.22 || !clear(x, z, 26, 5.5, 12) || g.getHeightAt(x, z) > 32 || g.getSlopeAt(x, z) < 0.86) return null;
+      if (r1 > (1 - fw) * 0.22 * this._vegFactor('oak', x, z) || !clear(x, z, 26, 5.5, 12) || g.getHeightAt(x, z) > 32 || g.getSlopeAt(x, z) < 0.86) return null;
       return { x, z, s: 0.8 + r2 * 0.6, r: r3 * Math.PI * 2, tint: TINT.oak, tv: 0.15 };
     });
     attempt('rock', 140, (x, z, r1, r2, r3) => {
       const slope = g.getSlopeAt(x, z);
-      if (r1 > 0.1 + (1 - slope) * 2.2 || !clear(x, z, 22, 4, 0)) return null;
-      const s = 0.5 + r2 * r2 * 2.6;
-      return { x, z, s, sy: s * (0.7 + r3 * 0.6), r: r3 * 6.283, sink: 0.3, tint: TINT.rock, tv: 0.12 };
+      if (r1 > (0.1 + (1 - slope) * 2.2) * this._vegFactor('rock', x, z) || !clear(x, z, 22, 4, 0)) return null;
+      const s = 0.5 + r2 * r2 * 2.6, sw = this._snowWeight(x, z);
+      return { x, z, s, sy: s * (0.7 + r3 * 0.6), r: r3 * 6.283, sink: 0.3, tint: sw > 0.05 ? TINT.rock.clone().lerp(SNOWC, sw * 0.5) : TINT.rock, tv: 0.12 };
     });
     attempt('sage', 260, (x, z, r1, r2, r3) => {
       const fw = g.forestWeight(x, z);
-      if (r1 > (1 - fw) * 0.45 + 0.03 || !clear(x, z, 12, 3, 0) || g.getSlopeAt(x, z) < 0.8) return null;
+      if (r1 > ((1 - fw) * 0.45 + 0.03) * this._vegFactor('sage', x, z) || !clear(x, z, 12, 3, 0) || g.getSlopeAt(x, z) < 0.8) return null;
       return { x, z, s: 0.6 + r2 * 0.9, r: r3 * Math.PI * 2, tint: TINT.sage, tv: 0.15 };
     });
     attempt('grass', 700, (x, z, r1, r2, r3) => {
-      if (r1 > 0.55 || !clear(x, z, 9, 2.2, 0) || g.getSlopeAt(x, z) < 0.82) return null;
+      if (r1 > 0.55 * this._vegFactor('grass', x, z) || !clear(x, z, 9, 2.2, 0) || g.getSlopeAt(x, z) < 0.82) return null;
       const fw = g.forestWeight(x, z);
       return { x, z, s: 0.7 + r2 * 0.8, r: r3 * Math.PI * 2, tint: _tmpC.lerpColors(TINT.grassGold, TINT.grassGreen, fw).clone(), tv: 0.2 };
     });

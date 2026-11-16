@@ -134,7 +134,7 @@ class Deer extends Animal {
         const edge = Math.max(Math.abs(this.position.x), Math.abs(this.position.z));
         if (edge > 780) { const k = smoothstep(780, 880, edge) * 1.5; away.x -= Math.sign(this.position.x) * k * (Math.abs(this.position.x) > 780 ? 1 : 0); away.z -= Math.sign(this.position.z) * k * (Math.abs(this.position.z) > 780 ? 1 : 0); }
         desired = Math.atan2(away.x, away.z) + Math.sin(this.stateTime * 1.7 + this.phase) * 0.35;
-        targetSpeed = 9.5; turnRate = 5; this.neckTarget = 0.4; this.headTarget = 0.15;
+        targetSpeed = 9.5 * (this.fleeMul || 1); turnRate = 5; this.neckTarget = 0.4; this.headTarget = 0.15;
         if (this.stateTime > 7 && dist > 55) {
           this.setState(DEER_STATE.GRAZE); this.home.set(this.position.x, 0, this.position.z);
           this.hasTarget = false; this.grazeTimer = 2 + this.rand() * 3;

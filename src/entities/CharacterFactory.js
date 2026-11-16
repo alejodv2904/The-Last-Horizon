@@ -32,6 +32,40 @@ Object.assign(PALETTES, {
   clara: P({ skin: 0xd0a07a, shirt: 0xd8d0c0, coat: 0x2a2a32, belt: 0x1a1a20, pants: 0x1a1a20, hat: 0x1c1c22, hatBand: 0x1c1c22, bandana: 0xd8d0c0, beard: 0xd0a07a, glove: 0xd0a07a }),
   traveler: P({ skin: 0xc8946c, shirt: 0xc8b890, coat: 0x4a6a5a, pants: 0x5a4a3a, hat: 0x8a7a5a, hatBand: 0x3a2a1a, bandana: 0xb8a888, beard: 0x7a5a3a }),
 });
+// Fase 5B: reparto de la campaña (banda, aliados, villanos). Mismo formato; "beard: skin" = sin barba.
+Object.assign(PALETTES, {
+  wren: P({ skin: 0xc8946c, shirt: 0xb8a888, coat: 0x6a4a34, pants: 0x4a4a52, hat: 0x7a6a50, hatBand: 0x3a2a1a, bandana: 0x3a6a9a, beard: 0xc8946c }),
+  abner: P({ skin: 0xb27a58, shirt: 0x8a8a7a, coat: 0x3a4a5a, pants: 0x2e3a4a, hat: 0x4a4a52, hatBand: 0xc9a24a, bandana: 0xc9a24a, beard: 0xcfcfc8, beardLong: true }),
+  josie: P({ skin: 0xb88866, shirt: 0xe4dccb, coat: 0x7a2a22, belt: 0x2a1a12, pants: 0x2a2a30, hat: 0x2a2018, hatBand: 0xb8402f, bandana: 0xb8402f, beard: 0xb88866, glove: 0xb88866 }),
+  nate: P({ skin: 0xd0a07a, shirt: 0xe4dccb, coat: 0x4a5a6a, pants: 0x3a3a42, hat: 0x5a4a38, hatBand: 0x2a2018, bandana: 0x6a8a9a, beard: 0x5a3a22 }),
+  marta: P({ skin: 0xc8946c, shirt: 0xe4dccb, coat: 0x8a6a5a, belt: 0x5a3a2a, pants: 0x5a3a2a, hat: 0xd8cfa8, hatBand: 0x8a6a5a, bandana: 0xe4dccb, beard: 0xc8946c, glove: 0xc8946c }),
+  doc: P({ skin: 0xc58c63, shirt: 0xf0e8d8, coat: 0x2a2428, pants: 0x3a3a42, hat: 0x1c1c20, hatBand: 0x1c1c20, bandana: 0x8a2a2a, beard: 0x8a8a82, beardLong: true }),
+  isaiah: P({ skin: 0x8a5a3a, shirt: 0x6a7a5a, coat: 0x4a5a3a, pants: 0x4a4a42, hat: 0x5a4a38, hatBand: 0x2a2018, bandana: 0x4a5a3a, beard: 0x2a1c12 }),
+  toby: P({ skin: 0xc8946c, shirt: 0xd0c8b0, coat: 0x6a5a48, pants: 0x4a4238, hat: 0x7a6a50, hatBand: 0x3a2a1a, bandana: 0xb8402f, beard: 0xc8946c }),
+  cole: P({ skin: 0xc58c63, shirt: 0xb8b0a0, coat: 0x5a5a48, pants: 0x3c3c44, hat: 0x7a6a50, hatBand: 0x2a2018, bandana: 0x5a6a7a, beard: 0xc58c63 }),
+  lucas: P({ skin: 0xa8744f, shirt: 0x5a4a3a, coat: 0x3a3028, pants: 0x34302c, hat: 0x1e1a18, hatBand: 0x8a7a50, bandana: 0x2a2a2e, beard: 0x1a1210 }),
+  ezra: P({ skin: 0xc79a74, shirt: 0x7a6a50, coat: 0x6a5f4c, pants: 0x4a4034, hat: 0x4a3b2a, hatBand: 0x2a2018, bandana: 0x2e4a5a, beard: 0x5a3a22, beardLong: true }),
+  dunmore: P({ skin: 0xc08a64, shirt: 0xf0e8d8, coat: 0x3a2a20, belt: 0x1a1210, pants: 0x2a2a30, hat: 0xb0a078, hatBand: 0x4a3a22, bandana: 0x8a1a1a, beard: 0xcfcfc8, beardLong: true }),
+  lena: P({ skin: 0xd0a07a, shirt: 0xf0e8d8, coat: 0x5a7a4a, belt: 0x3a2a1a, pants: 0x4a3a2a, hat: 0xd8cfa8, hatBand: 0x5a7a4a, bandana: 0xf0e8d8, beard: 0xd0a07a, glove: 0xd0a07a }),
+  ines: P({ skin: 0xc8946c, shirt: 0xd8d0c0, coat: 0x2a1a22, belt: 0x1a1218, pants: 0x1a1218, hat: 0x1c1c22, hatBand: 0x8a1a2a, bandana: 0xd8d0c0, beard: 0xc8946c, glove: 0xc8946c }),
+  mateo: P({ skin: 0xb98660, shirt: 0xe8e0cc, coat: 0x2a3a5a, pants: 0x34343a, hat: 0x1a1a1c, hatBand: 0x9a8a5a, bandana: 0x9a2a2a, beard: 0xb98660 }),
+  hale: P({ skin: 0xd0a07a, shirt: 0xf8f0e0, coat: 0x1a1a22, belt: 0x16161a, pants: 0x1c1c22, boots: 0x101010, hat: 0x0c0c10, hatBand: 0x5a5a68, bandana: 0x5a1a1a, beard: 0xa0a0a0, beardLong: true }),
+  marlowe: P({ skin: 0xc8946c, shirt: 0xe8e0d0, coat: 0x3a3a42, belt: 0x1a1a20, pants: 0x2e2e36, boots: 0x15100c, hat: 0x26262c, hatBand: 0x16161a, bandana: 0x2a2a30, beard: 0x3a3a3a }),
+  odwyer: P({ skin: 0xd0a07a, shirt: 0xa89878, coat: 0x4a5a3a, pants: 0x4a4238, hat: 0x6a5a44, hatBand: 0x3a2e22, bandana: 0x8a3a2a, beard: 0x9a5a2a, beardLong: true }),
+  wei: P({ skin: 0xc8a070, shirt: 0x2a3a5a, coat: 0x1e2a44, pants: 0x1a1a22, hat: 0xcfc08a, hatBand: 0x8a6a3a, bandana: 0x2a3a5a, beard: 0xc8a070 }),
+  grady: P({ skin: 0xb98660, shirt: 0xd8d0b8, coat: 0x4a3a2a, belt: 0x120d08, pants: 0x2a2a2e, hat: 0x2a2018, hatBand: 0x8a7a50, bandana: 0xa42a20, beard: 0x3a2a1a, beardLong: true }),
+  remedios: P({ skin: 0xa8744f, shirt: 0xe4dccb, coat: 0x6a4a5a, belt: 0x3a2a3a, pants: 0x3a2a3a, hat: 0xcfc08a, hatBand: 0x6a4a5a, bandana: 0xe4dccb, beard: 0xa8744f, glove: 0xa8744f }),
+  whitmore: P({ skin: 0xc08a64, shirt: 0xd8d0b8, coat: 0x2a3a5a, belt: 0x1a1a22, pants: 0x2e3a4a, hat: 0x2a3a5a, hatBand: 0xc9a24a, bandana: 0xc9a24a, beard: 0x9a9a92, beardLong: true }),
+  garrity: P({ skin: 0xb98660, shirt: 0x6b5a46, coat: 0x4a3a30, hat: 0x2a2420, hatBand: 0x7a1f18, bandana: 0x5a5a3a, beard: 0x2a1c12, beardLong: true }),
+  jed: P({ skin: 0xc79a74, shirt: 0xa89878, coat: 0x5a4a3a, pants: 0x4a4238, hat: 0x6a5a44, hatBand: 0x3a2a1a, bandana: 0xa89878, beard: 0xc79a74 }),
+  joaquin: P({ skin: 0xa8744f, shirt: 0xd8d0c0, coat: 0x6a5a48, pants: 0x4a4238, hat: 0xcfc08a, hatBand: 0x8a5a3a, bandana: 0x8a2a2a, beard: 0xa8744f }),
+});
+// id de personaje de la campaña → paleta
+const NPC_PALETTE = {
+  eli: 'player', silas: 'silas', pike: 'trader', hattie: 'storekeeper', sal: 'barkeep', clara: 'clara', tomas: 'tomas', pruitt: 'pruitt', sheriff: 'sheriff',
+  boone: 'leader', narrator: 'traveler',
+};
+const paletteFor = (id) => (PALETTES[id] ? id : NPC_PALETTE[id] || 'traveler');
 const WOOD = 0x6e4526, METAL = 0x2c2c30;
 const RIFLE_BACK_POS = new THREE.Vector3(0.03, 0.3, -0.18);
 const RIFLE_BACK_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0.55, 'ZXY'));
@@ -220,4 +254,4 @@ function poseHumanoid(h, s) {
   }
 }
 
-export { PALETTES, WOOD, METAL, RIFLE_BACK_POS, RIFLE_BACK_Q, RIFLE_AIM_POS, RIFLE_AIM_Q, buildHumanoid, poseHumanoid };
+export { PALETTES, NPC_PALETTE, paletteFor, WOOD, METAL, RIFLE_BACK_POS, RIFLE_BACK_Q, RIFLE_AIM_POS, RIFLE_AIM_Q, buildHumanoid, poseHumanoid };

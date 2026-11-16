@@ -28,6 +28,14 @@ class BanditSystem {
 
   addGunman(def) { const g = new Gunman(this.game, this, def); g.active = def.active !== false; this.gunmen.push(g); return g; }
 
+  // Retira un pistolero temporal (duelistas de la campaña): lo saca de las listas y libera sus mallas.
+  removeGunman(g) {
+    const i = this.gunmen.indexOf(g); if (i < 0) return;
+    this.gunmen.splice(i, 1); this.releaseToken(g);
+    if (g._cc) g._cc = null;
+    this.game.scene.remove(g.root); g.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  }
+
   _initCamp(wc) {
     const def = wc.def, members = [];
     def.members.forEach((kind, i) => {

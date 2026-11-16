@@ -1,12 +1,14 @@
 // Orquestador: bucle principal, modos de juego, interacciones, cámara cinemática y rendimiento.
-// Modos: explore | dialogue | skinning | action | shop | board | arrested | dead
+// Modos: explore | dialogue | skinning | action | shop | board | arrested | dead | duel | cutscene
 import * as THREE from 'three';
 import { CONFIG } from './Config.js';
+import { Settings } from './Settings.js';
 import { clamp, lerp, damp, easeInOut, distXZ } from './MathUtils.js';
 import { EventBus } from './EventBus.js';
 import { InputManager } from './InputManager.js';
 import { createSharedMaterials } from '../render/GeometryKit.js';
 import { ParticleSystem } from '../render/ParticleSystem.js';
+import { EffectsHub } from '../render/EffectsPool.js';
 import { AudioSynthesizer } from '../systems/AudioSynthesizer.js';
 import { WorldManager } from '../world/WorldManager.js';
 import { PlayerController } from '../entities/PlayerController.js';
@@ -27,17 +29,21 @@ import { BountySystem } from '../systems/BountySystem.js';
 import { LootSystem } from '../systems/Loot.js';
 import { UIManager } from '../ui/UIManager.js';
 import { TouchControls } from '../ui/TouchControls.js';
+import { MenuManager } from '../ui/MenuManager.js';
+import { DeadEye } from '../systems/DeadEye.js';
+import { DuelSystem } from '../systems/DuelSystem.js';
+import { CampaignManager } from '../narrative/CampaignManager.js';
+import { StoryDirector } from '../narrative/StoryDirector.js';
 
 class Game {
-  // data: { story, shops: { pike, hattie }, town, bounties }
+  // data: { story, shops: { pike, hattie }, town, bounties, campaign }
   constructor(data) {
     const { story } = data;
     this.bus = new EventBus();
+    this.settings = new Settings();
     this.story = story; this.townData = data.town;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.touch = document.documentElement.classList.contains('touch');
-    // En móvil se limita más la resolución interna (las pantallas tienen DPR 3 pero la GPU va justa); el ajuste dinámico sigue activo.
-    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, this.touch ? CONFIG.MAX_PIXEL_RATIO_TOUCH : CONFIG.MAX_PIXEL_RATIO);
+    this.renderer = new THREE.WebGLRenderer({ antialias: this.settings.get('quality') !== 'low', powerPreference: 'high-performance' });
     this.pixelRatio = this.maxPixelRatio;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -49,18 +55,20 @@ class Game {
 
     createSharedMaterials();
     this.ui = new UIManager(this.story);
-    this.audio = new AudioSynthesizer();
+    this.audio = new AudioSynthesizer(this.settings);
     this.input = new InputManager(this.renderer.domElement, this.bus, { touch: this.touch });
     this.ui.onChoice = (i) => this.input.pressKey(`Digit${i + 1}`);
     this.ui.onUseItem = (id) => this.useItem(id);
     this.touchControls = this.touch ? new TouchControls(this) : null;
     this.world = new WorldManager(this);
     this.fx = { dust: new ParticleSystem(this.scene, 320, THREE.NormalBlending), glow: new ParticleSystem(this.scene, 240, THREE.AdditiveBlending) };
+    this.fx.impact = new EffectsHub(this);   // estelas, agujeros de bala, huellas e impactos: todo con object pooling
     this.inventory = new Inventory(this.bus, this.story.items);
     this.inventory.add('ammo', CONFIG.START_AMMO, true);
     this.upgrades = new Set();
     this.hints = new Set();
     this.honor = new HonorSystem(this, this.townData.honor);
+    this.deadEye = new DeadEye(this); this.duel = new DuelSystem(this);
     this.player = new PlayerController(this);
     this.horse = new Horse(this, CONFIG.HORSE_SPAWN.x, CONFIG.HORSE_SPAWN.z);
     const post = this.world.post, ts = this.world.town.spots;
@@ -86,8 +94,12 @@ class Game {
     this.law = new LawSystem(this, this.bandits, this.world.town, this.townData);
     this.bandits.law = this.law;
     this.bounties = new BountySystem(this, data.bounties);
+    this.director = new StoryDirector(this);
+    this.campaign = new CampaignManager(this, data.campaign); this.campaign.director = this.director;
+    this.applyQuality(this.settings.get('quality'), true);
+    this.menu = new MenuManager(this);
 
-    this.mode = 'explore'; this.started = false; this.paused = true; this.elapsed = 0; this._pausedAt = 0;
+    this.mode = 'explore'; this.started = false; this.paused = true; this.elapsed = 0; this.musicState = 'calm'; this._combatT = 0; this._pausedAt = 0;
     this.skinning = null; this.death = null; this.action = null;
     this.cine = { blend: 0, side: 1, pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this._camPos = new THREE.Vector3(); this._camLook = new THREE.Vector3(); this._v = new THREE.Vector3();
@@ -96,29 +108,43 @@ class Game {
     this._radarTick = 0; this._inTown = false; this._saloonPos = this.world.town.local(-16, -12);
 
     this._bindEvents();
-    this._setupMenu();
     this.missions.updateTracker();
     this._updateCamera(0.016, true);
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
-  _setupMenu() {
-    const has = this.save.hasSave();
-    const btn = document.getElementById('btn-start'), btnNew = document.getElementById('btn-new');
-    btn.textContent = has ? 'CONTINUAR' : 'CABALGAR';
-    btnNew.classList.toggle('hidden', !has);
-    document.getElementById('loading-note').textContent = has
-      ? 'Partida guardada encontrada. «Nueva partida» borra el progreso guardado.'
-      : this.touch ? 'Se activará la pantalla completa en horizontal. La resolución se ajusta sola para mantener la fluidez.'
-        : 'Recomendado: Chrome o Edge. El juego ajusta la resolución automáticamente para mantener 60 FPS.';
+  // Calidad gráfica (Baja / Media / Alta): resolución, sombras, niebla y distancia de chunks, vegetación (InstancedMesh), partículas,
+  // radio de la IA y capas de música. El suavizado de bordes (MSAA) solo se decide al crear el contexto: se aplica al recargar.
+  // En móvil la resolución interna tiene además un tope propio (CONFIG.MAX_PIXEL_RATIO_TOUCH).
+  get maxPixelRatio() {
+    return Math.min(window.devicePixelRatio || 1, this.settings.quality.pixelMax, this.touch ? CONFIG.MAX_PIXEL_RATIO_TOUCH : CONFIG.MAX_PIXEL_RATIO);
+  }
+  applyQuality(id, silent = false) {
+    this.settings.set('quality', id);
+    const q = this.settings.quality;
+    this.pixelRatio = this.maxPixelRatio; this.renderer.setPixelRatio(this.pixelRatio);
+    this.world.setQuality(q); this.fx.impact.setQuality(q);
+    this.fx.dust.limit = Math.max(40, Math.floor(this.fx.dust.capacity * q.particles)); this.fx.glow.limit = Math.max(30, Math.floor(this.fx.glow.capacity * q.particles));
+    CONFIG.AI_ACTIVE_RADIUS = q.aiRadius;
+    for (const n of this.npcs) if (n.viewDist > q.npcView) n.viewDist = q.npcView;
+    if (this.audio.music) this.audio.music.setLayers(q.musicLayers);
+    if (!silent) this.ui.notify(`Calidad gráfica: ${q.label}`, id === 'low' ? 'Sin sombras y menos vegetación. El suavizado de bordes se aplica al recargar.' : 'Aplicada.');
   }
 
-  // Pausa manual (botón táctil) o automática (girar a vertical, cambiar de app). Se reanuda tocando la pantalla.
+  // PNJ de la campaña (se crean y retiran en caliente).
+  addNPC(cfg) { const n = new NPC(this, cfg); this.npcs.push(n); return n; }
+  removeNPC(id) {
+    const i = this.npcs.findIndex((n) => n.id === id && n.dynamic !== false); if (i < 1) return;   // el índice 0 es Silas y nunca se borra
+    const n = this.npcs[i]; this.npcs.splice(i, 1); n.dispose();
+  }
+
+  // Pausa manual (botón táctil) o automática (girar a vertical, cambiar de app). Se reanuda desde el menú de pausa.
   pause() {
     if (!this.started || this.paused || this.mode === 'dead') return;
     this.paused = true; this._pausedAt = performance.now(); this.input.mouse.right = false; this.input.mouse.left = false;
+    this.deadEye.deactivate();
     document.getElementById('overlay-pause').classList.remove('hidden');
-    this.save.save();
+    this.save.save(); this.menu.refreshSlots();
   }
 
   get _menuMode() { return this.mode === 'shop' || this.mode === 'board'; }
@@ -134,19 +160,16 @@ class Game {
     // iOS/Android reportan el tamaño final de la pantalla con retraso tras girar.
     window.addEventListener('orientationchange', () => { onResize(); setTimeout(onResize, 250); setTimeout(onResize, 700); });
     document.getElementById('btn-fs').addEventListener('click', () => { if (this.touchControls) this.touchControls.enterFullscreen(); });
-    document.getElementById('btn-start').addEventListener('click', () => this.start(this.save.hasSave()));
-    document.getElementById('btn-new').addEventListener('click', () => { this.save.clear(); this.start(false); });
-    // Se ignora el «clic» fantasma que el navegador genera al soltar el dedo del botón de pausa (caería sobre este overlay y reanudaría).
-    document.getElementById('overlay-pause').addEventListener('click', () => { if (performance.now() - this._pausedAt > 500) this.input.requestLock(); });
     window.addEventListener('beforeunload', () => this.save.save());
     window.addEventListener('pagehide', () => this.save.save());
     document.addEventListener('visibilitychange', () => { if (document.hidden) { this.save.save(); if (this.touch) this.pause(); } });
     this.bus.on('pointerlock', (locked) => {
       if (!this.started) return;
-      if (locked) { this.paused = false; document.getElementById('overlay-pause').classList.add('hidden'); this.audio.init(); }
+      if (locked) { this.paused = false; document.getElementById('overlay-pause').classList.add('hidden'); this.audio.init(); this.menu.refreshSlots(); }
       else if (!this.input.fallback && !this._menuMode) {
         this.paused = true; document.getElementById('overlay-pause').classList.remove('hidden'); this.input.mouse.right = false;
-        this.save.save();
+        this.deadEye.deactivate();
+        this.save.save(); this.menu.refreshSlots();
       }
     });
     this.bus.on('pointerlock:error', (fallback) => {
@@ -163,7 +186,7 @@ class Game {
         if (def) { this.ui.notify(`+${e.delta} ${def.name}`, def.desc); this.audio.playItem(); }
       }
     });
-    this.bus.on('flag:set', (f) => { this.world.applyFlag(f); this.townLife.applyFlag(f); if (this.started) this.save.save(); });
+    this.bus.on('flag:set', (f) => { this.world.applyFlag(f); this.townLife.applyFlag(f); if (f === 'reed_dead') this.law.retireSheriff(); if (this.started) this.save.save(); });
     this.bus.on('animal:killed', (a) => {
       if (a.species === 'deer') this._hint('skin', 'Ciervo abatido', 'Acércate al cuerpo y pulsa [E] para despellejarlo.');
       else this._hint('skinwolf', 'Lobo abatido', 'Su piel vale buen dinero en el puesto de Pike.');
@@ -175,18 +198,23 @@ class Game {
   start(continueSave) {
     if (this.started) return;
     this.audio.init();
-    if (continueSave) this.save.apply(this.save.load());
     this.started = true; this.paused = false;
     this.input.enabled = true;
-    if (this.touchControls) this.touchControls.enterFullscreen();
+    if (this.touchControls) this.touchControls.enterFullscreen();   // dentro del gesto del usuario (clic en una ranura)
+    this.save.enabled = false;   // durante la carga se emiten banderas que dispararían guardados con el estado a medio restaurar
+    try {
+      if (continueSave && this.save.load()) this.save.apply(this.save.load());
+      else { continueSave = false; this.campaign.begin(); }
+    } finally { this.save.enabled = true; }
     document.getElementById('overlay-start').classList.add('hidden');
     this.input.requestLock();
     this.missions.updateTracker();
-    this.ui.banner(this.story.chapterTitle, this.story.chapterSubtitle, 4.5);
-    setTimeout(() => this._hint('move', 'El campamento te espera', 'Habla con Silas Crane junto a la fogata. [Shift] para correr.'), 4800);
-    setTimeout(() => this._hint('horse', 'Tu caballo, Ceniza', '[F] montar o desmontar · [H] silbar para llamarlo · [Shift] galopar.'), 11000);
-    setTimeout(() => this._hint('instinct', 'Instinto de cazador', 'Pulsa [V] para ver rastros y animales cercanos.'), 18000);
-    setTimeout(() => this._hint('town', 'Redwood Gulch', 'Un pueblo fronterizo al sureste: sigue el camino de tierra desde el campamento.'), 26000);
+    if (!continueSave) {
+      setTimeout(() => this._hint('move', 'Controles básicos', '[Shift] correr · [E] interactuar · [Tab] alforjas. Silas te espera junto a la fogata.'), 9000);
+      setTimeout(() => this._hint('horse', 'Tu caballo, Ceniza', '[F] montar o desmontar · [H] silbar para llamarlo · [Shift] galopar.'), 16000);
+      setTimeout(() => this._hint('instinct', 'Instinto de cazador', 'Pulsa [V] para ver rastros y animales cercanos.'), 24000);
+    }
+    setTimeout(() => this._hint('deadeye', 'Dead Eye', 'Apunta con clic derecho y pulsa [Q]: el tiempo se ralentiza para marcar blancos. Se recarga cazando y con tónicos.'), 40000);
     this.save.save();
   }
 
@@ -199,7 +227,7 @@ class Game {
   /* ---------------- Interacciones ---------------- */
   startSkinning(animal) {
     this.setMode('skinning');
-    this.skinning = { animal, t: 0, dur: animal.species === 'wolf' ? 2.8 : 2.4 };
+    this.skinning = { animal, t: 0, dur: animal.species === 'deer' ? 2.4 : animal.species === 'wolf' ? 2.8 : 3.4 };
     this.player.faceTarget = animal.getCenter(new THREE.Vector3());
     this.audio.playSkin(this.skinning.dur);
   }
@@ -211,12 +239,9 @@ class Game {
     if (s.t >= s.dur) {
       const a = s.animal;
       a.setSkinned();
-      if (a.species === 'wolf') this.inventory.add('wolf_pelt', 1);
-      else {
-        this.inventory.add('deer_pelt', 1);
-        this.inventory.add('venison', 1);
-        if (a.isBuck) this.inventory.add('buck_antlers', 1);
-      }
+      // Cada especie tiene sus piezas (alce, oso, puma…); ciervo y lobo conservan las suyas de la Fase 2.
+      const yields = a.skinYields || (a.species === 'wolf' ? ['wolf_pelt'] : ['deer_pelt', 'venison', ...(a.isBuck ? ['buck_antlers'] : [])]);
+      yields.forEach((id) => this.inventory.add(id, 1));
       this.ui.setProgress(null);
       this.player.faceTarget = null;
       this.skinning = null;
@@ -262,7 +287,7 @@ class Game {
     if (def.use.heal) {
       if (p.health + p.healPool >= CONFIG.PLAYER_MAX_HEALTH - 0.5) { this.ui.notify('Ya estás sano', 'Guarda el tónico para cuando lo necesites.'); return false; }
       this.inventory.remove(id, 1, true);
-      p.heal(def.use.heal); this.audio.playDrink();
+      p.heal(def.use.heal); this.audio.playDrink(); this.deadEye.addTonic();
       this.ui.notify(def.name, `+${def.use.heal} de salud`);
     }
     return true;
@@ -285,21 +310,25 @@ class Game {
     }
     let key = null, prompt = null, action = null;
     const sheriff = this.law.sheriff;
-    const npc = this.npcs.find((n) => n.active && distXZ(pos, n.position) < 3.0);
+    let npc = null, nd = 3.0;   // el PNJ más cercano (en el campamento hay varios a pocos metros)
+    for (const n of this.npcs) { if (!n.active || !n.root.visible) continue; const d = distXZ(pos, n.position); if (d < nd) { nd = d; npc = n; } }
     const captive = this.bandits.getNearestSurrendered(pos, 2.8);
     const citizen = this.townLife.nearestCitizen(pos, 2.6);
     const corpse = this.townLife.nearestCorpse(pos, 2.2);
+    const ci = this.campaign.getInteraction();
     if (npc) {
       key = 'E';
       if (npc.interaction === 'shop') { prompt = `Comerciar con ${npc.name}`; action = () => this.shop.open(npc); }
       else { prompt = `Hablar con ${npc.name}`; action = () => { this.ui.hidePrompt(); this.dialogue.start(npc); }; }
-    } else if (sheriff.alive && sheriff.state === 'idle' && sheriff.mode === 'peace' && distXZ(pos, sheriff.position) < 3.0) {
+    } else if (sheriff.alive && !sheriff.retired && sheriff.active !== false && sheriff.state === 'idle' && sheriff.mode === 'peace' && distXZ(pos, sheriff.position) < 3.0) {
       key = 'E'; prompt = `Hablar con ${sheriff.name}`; action = () => { this.ui.hidePrompt(); this.dialogue.start(sheriff); };
     } else if (captive) {
       key = 'E'; prompt = `Atar a ${captive.name}`;
       action = () => this.startAction({ dur: 2.2, face: captive.position, onDone: () => { if (captive.alive && captive.state === 'surrender') this.bounties.tieCaptive(captive); } });
     } else if (citizen && !this.townLife.weaponDrawn() && citizen.state !== 'flee' && citizen.state !== 'cower') {
       key = 'E'; prompt = `Saludar a ${citizen.name}`; action = () => this.townLife.greetCitizen(citizen);
+    } else if (ci) {
+      key = 'E'; prompt = ci.prompt; action = ci.action;
     } else if (distXZ(pos, town.board.pos) < 3.4) {
       key = 'E'; prompt = 'Tablón de recompensas'; action = () => this.openBoard();
     } else if (this.townLife.strongboxReady && distXZ(pos, town.strongbox.pos) < 2.2) {
@@ -327,6 +356,7 @@ class Game {
     if (this.mode === 'dead') return;
     if (this.skinning) { this.ui.setProgress(null); this.skinning = null; this.player.faceTarget = null; }
     if (this.action) { this.ui.setProgress(null); this.action = null; this.player.faceTarget = null; }
+    this.deadEye.deactivate(); this.duel.abort();
     this.setMode('dead');
     this.bandits.releaseAllTokens(); this.bandits.projectiles.clear();
     const loss = Math.min(this.inventory.money, Math.max(1, Math.round(this.inventory.money * 10) / 100));
@@ -338,23 +368,26 @@ class Game {
     d.t += dt;
     if (d.t > 3.2 && !d.done) {
       d.done = true;
-      const sp = CONFIG.PLAYER_SPAWN;
-      this.player.respawnAt(sp.x, sp.z);
+      const fp = this.world.firePos;
+      this.player.respawnAt(fp.x + (CONFIG.PLAYER_SPAWN.x - CONFIG.CAMP.x), fp.z + (CONFIG.PLAYER_SPAWN.z - CONFIG.CAMP.z));
       if (d.loss > 0) this.inventory.addMoney(-d.loss);
       if (distXZ(this.horse.position, this.player.position) > 60) {
-        this.horse.position.set(CONFIG.HORSE_SPAWN.x, this.world.getHeightAt(CONFIG.HORSE_SPAWN.x, CONFIG.HORSE_SPAWN.z), CONFIG.HORSE_SPAWN.z);
+        const hx = fp.x + (CONFIG.HORSE_SPAWN.x - CONFIG.CAMP.x), hz = fp.z + (CONFIG.HORSE_SPAWN.z - CONFIG.CAMP.z);
+        this.horse.position.set(hx, this.world.getHeightAt(hx, hz), hz);
         this.horse.state = 'idle'; this.horse.speed = 0; this.horse.tracks.reset();
       }
       this.world.chunks.update(this.player.position, true);
       this.ui.setFade(false);
       this.setMode('explore');
-      this.ui.notify('Despiertas en el campamento', d.loss > 0 ? `Perdiste $${d.loss.toFixed(2)}` : 'Silas te curó las heridas.');
+      this.ui.notify('Despiertas en el campamento', d.loss > 0 ? `Perdiste $${d.loss.toFixed(2)}` : 'Te curaron las heridas.');
+      this.campaign.onPlayerRespawn();
       this.save.save();
     }
   }
 
   /* ---------------- Cámara ---------------- */
   _computeCinematic() {
+    if (this.mode === 'duel') { const c = this.duel.cam; this.cine.pos.copy(c.pos); this.cine.look.copy(c.look); return; }
     const a = this.player.position, b = this.dialogue.npc.position;
     const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
@@ -362,18 +395,19 @@ class Game {
     const gy = this.world.getHeightAt(mx, mz);
     this.cine.pos.set(mx + px * 3.3 - dx / len * 0.8, gy + 1.55, mz + pz * 3.3 - dz / len * 0.8);
     this.cine.pos.y = Math.max(this.cine.pos.y, this.world.getHeightAt(this.cine.pos.x, this.cine.pos.z) + 0.6);
-    const sp = this.dialogue.currentSpeaker === 'player' ? a : b;
+    const sp = this.dialogue.speakerPos();
     this.cine.look.set(lerp(mx, sp.x, 0.3), gy + 1.45, lerp(mz, sp.z, 0.3));
   }
   _updateCamera(dt, instant = false) {
     const fov = this.player.computeCamera(instant ? 1 : dt, this._camPos, this._camLook);
-    this.cine.blend = damp(this.cine.blend, this.mode === 'dialogue' ? 1 : 0, 3.2, dt);
+    const cinema = this.mode === 'dialogue' || this.mode === 'duel';
+    this.cine.blend = damp(this.cine.blend, cinema ? 1 : 0, this.mode === 'duel' ? 4.5 : 3.2, dt);
     let finalFov = fov;
-    if (this.cine.blend > 0.001 && this.dialogue.npc) {
+    if (this.cine.blend > 0.001 && (this.dialogue.npc || this.mode === 'duel')) {
       this._computeCinematic();
       const k = easeInOut(clamp(this.cine.blend, 0, 1));
       this._camPos.lerp(this.cine.pos, k); this._camLook.lerp(this.cine.look, k);
-      finalFov = lerp(fov, 44, k);
+      finalFov = lerp(fov, this.mode === 'duel' ? this.duel.cam.fov : 44, k);
     }
     this.camera.position.copy(this._camPos);
     this.camera.lookAt(this._camLook);
@@ -387,14 +421,16 @@ class Game {
     if (pf.time < 1.0) return;
     const fps = pf.frames / pf.time; pf.frames = 0; pf.time = 0;
     if (fps < 50) { pf.lowStreak++; pf.highStreak = 0; } else if (fps > 58.5) { pf.highStreak++; pf.lowStreak = 0; } else { pf.lowStreak = 0; pf.highStreak = 0; }
-    const maxPR = this.maxPixelRatio;
-    if (pf.lowStreak >= 2 && this.pixelRatio > CONFIG.MIN_PIXEL_RATIO) {
-      this.pixelRatio = Math.max(CONFIG.MIN_PIXEL_RATIO, this.pixelRatio - 0.1); this.renderer.setPixelRatio(this.pixelRatio); pf.lowStreak = 0;
+    const q = this.settings.quality, maxPR = this.maxPixelRatio;
+    if (pf.lowStreak >= 2 && this.pixelRatio > q.pixelMin) {
+      this.pixelRatio = Math.max(q.pixelMin, this.pixelRatio - 0.1); this.renderer.setPixelRatio(this.pixelRatio); pf.lowStreak = 0;
     } else if (pf.highStreak >= 4 && this.pixelRatio < maxPR) {
       this.pixelRatio = Math.min(maxPR, this.pixelRatio + 0.05); this.renderer.setPixelRatio(this.pixelRatio); pf.highStreak = 0;
     }
-    const info = this.renderer.info.render, ch = this.world.chunks;
-    this.ui.setFps(`${Math.round(fps)} FPS · ${info.calls} draw calls · ${(info.triangles / 1000).toFixed(0)}k tris · res ${this.pixelRatio.toFixed(2)}x · chunks ${ch.active.size}/9 (cola ${ch.pendingBuilds}) · IA fauna ${this.wildlife.activeCount} · IA pistoleros ${this.bandits.activeCount || 0}`);
+    // Aviso (una sola vez) si la calidad elegida no llega a 40 FPS sostenidos.
+    if (fps < 40) { pf.slow = (pf.slow || 0) + 1; if (pf.slow === 8 && this.settings.get('quality') !== 'low') this.ui.notify('Rendimiento bajo', 'Prueba una calidad gráfica menor en el menú de pausa [Esc].'); } else pf.slow = Math.max(0, (pf.slow || 0) - 1);
+    const info = this.renderer.info.render, ch = this.world.chunks, st = this.fx.impact.stats, bp = this.bandits.projectiles.pool;
+    this.ui.setFps(`${Math.round(fps)} FPS · ${q.label} · ${info.calls} draw calls · ${(info.triangles / 1000).toFixed(0)}k tris · res ${this.pixelRatio.toFixed(2)}x · chunks ${ch.active.size}/9 (cola ${ch.pendingBuilds}) · IA fauna ${this.wildlife.activeCount} · IA pistoleros ${this.bandits.activeCount || 0} · pools: balas ${bp.activeCount}/${bp.total}, estelas ${st.tracers.active}/${st.tracers.total}, agujeros ${st.holes.active}/${st.holes.total}, huellas ${st.prints.active}/${st.prints.total}`);
   }
 
   /* ---------------- Bucle ---------------- */
@@ -403,8 +439,26 @@ class Game {
     if (this.touchControls) this.touchControls.sync();
     this._updatePerformance(dt);
     if (!this.paused || !this.started) this.update(dt);
+    this.audio.updateMusic(this._musicState(dt));   // también en pausa: la música no se corta al abrir el menú
     this.renderer.render(this.scene, this.camera);
     this.input.endFrame();
+  }
+
+  // Estado musical según lo que ocurre: duelo > escena emotiva > tiroteo (con 6 s de cola) > sigilo > exploración tranquila.
+  _musicState(dt) {
+    if (!this.started) return 'calm';
+    if (this.paused) return this.musicState;
+    const p = this.player.position;
+    let st = 'calm';
+    if (this.duel.active) st = 'duel';
+    else if ((this.dialogue.active && this.dialogue.emotional) || this.campaign.busy) st = 'emotional';
+    else {
+      if (this.bandits.hostileNear(p, 85) || this.wildlife.nearbyThreat(p, 45) || this.deadEye.active) this._combatT = 6; else this._combatT = Math.max(0, this._combatT - dt);
+      if (this._combatT > 0 && this.mode !== 'dialogue') st = 'combat';
+      else if (this.campaign.stealthActive()) st = 'stealth';
+    }
+    this.musicState = st;
+    return st;
   }
 
   _simulate(dt) {
@@ -419,18 +473,23 @@ class Game {
     this.loot.update(dt);
   }
 
-  update(dt) {
+  // rdt = tiempo real; dt = tiempo de juego (Dead Eye lo ralentiza a 0.25x y el final de un duelo a 0.3x). La cámara, la interfaz,
+  // el audio y las entradas usan rdt para seguir siendo ágiles en cámara lenta.
+  update(rdt) {
+    if (this.started) this.deadEye.update(rdt, this.input);
+    const dt = rdt * (this.duel.active ? this.duel.slow : this.deadEye.timeScale);
     this.elapsed += dt;
     const sky = this.world.update(dt, this.player.position, this.camera);
     if (!this.started) {
       this.player.yaw += dt * 0.05;
       this._simulate(dt);
       this._updateCamera(dt);
-      this.fx.dust.update(dt, this.camera, this.renderer); this.fx.glow.update(dt, this.camera, this.renderer);
+      this.fx.dust.update(dt, this.camera, this.renderer); this.fx.glow.update(dt, this.camera, this.renderer); this.fx.impact.update(dt);
       return;
     }
     const input = this.input;
-    if (this.mode === 'dialogue') this.dialogue.update(dt, input);
+    if (this.mode === 'dialogue') this.dialogue.update(rdt, input);
+    else if (this.mode === 'duel') this.duel.update(rdt, input);
     else if (this.mode === 'skinning') this._updateSkinning(dt);
     else if (this.mode === 'action') this._updateAction(dt);
     else if (this.mode === 'shop') { if (input.wasPressed('Escape') || input.wasPressed('KeyE')) this.shop.close(); }
@@ -444,7 +503,8 @@ class Game {
       if (this.ui.inventoryOpen) {   // [1-9] usa el objeto consumible de esa posición en las alforjas
         for (let i = 1; i <= 9; i++) if (input.wasPressed(`Digit${i}`) && this.ui.inventoryUsable[i - 1]) this.useItem(this.ui.inventoryUsable[i - 1]);
       }
-      if (input.wasPressed('KeyQ')) this.useTonic();
+      if (input.wasPressed('KeyQ')) { if (this.player.isAiming || this.deadEye.active) this.deadEye.toggle(); else this.useTonic(); }   // Q apuntando = Dead Eye
+      if (input.wasPressed('KeyB')) this.campaign.fastTravelCamp();
       if (input.wasPressed('KeyT')) {
         this.world.time.timeScale = this.world.time.timeScale > 1 ? 1 : 40;
         this.ui.notify(this.world.time.timeScale > 1 ? 'Tiempo acelerado ×40' : 'Tiempo normal');
@@ -456,14 +516,16 @@ class Game {
       if (this.bandits.hostileNear(this.player.position, 75)) this._hint('bandits', '¡Bandidos!', 'Busca cobertura: se esconden y se asoman para disparar. Aguanta y responde cuando se asomen. Tónicos con [Q].');
       this._townWatch();
     }
+    this.campaign.update(dt);
     this.fx.dust.update(dt, this.camera, this.renderer);
     this.fx.glow.update(dt, this.camera, this.renderer);
-    this._updateCamera(dt);
-    this.save.update(dt);
+    this.fx.impact.update(dt);
+    this._updateCamera(rdt);
+    this.save.update(rdt);
 
-    this.audio.update(dt, { fireDistance: distXZ(this.player.position, this.world.firePos), night: sky.night, saloonDistance: distXZ(this.player.position, this._saloonPos) });
+    this.audio.update(rdt, { fireDistance: distXZ(this.player.position, this.world.firePos), night: sky.night, saloonDistance: distXZ(this.player.position, this._saloonPos) });
     const pl = this.player, ui = this.ui, inv = this.inventory;
-    ui.update(dt);
+    ui.update(rdt);
     ui.setAmmo(pl.mag, inv.count('ammo'), pl.reloadTimer > 0, this.upgrades.size ? 'RIFLE DE PALANCA +' : 'RIFLE DE PALANCA');
     ui.setStamina(pl.stamina, pl.exhausted);
     ui.setHealth(pl.health);
@@ -488,21 +550,23 @@ class Game {
   _drawRadar() {
     const pl = this.player, ms = this.missions, pos = pl.position, town = this.world.town;
     const icons = [
-      { type: 'camp', x: CONFIG.CAMP.x, z: CONFIG.CAMP.z, clamp: true },
+      { type: 'camp', x: this.world.firePos.x, z: this.world.firePos.z, clamp: true },
       { type: 'shop', x: CONFIG.TRADING_POST.x, z: CONFIG.TRADING_POST.z, clamp: true },
       { type: 'town', x: town.center.x, z: town.center.z, clamp: true },
     ];
     for (const bc of this.world.banditCamps) if (distXZ(bc.center, pos) < 300) icons.push({ type: 'banditCamp', x: bc.center.x, z: bc.center.z, clamp: false });
     if (!pl.riding) icons.push({ type: 'horse', x: this.horse.position.x, z: this.horse.position.z, clamp: true });
-    const marker = ms.getMarkerFor('silas');
-    if (marker) icons.push({ type: marker === 'ready' ? 'npcReady' : 'npc', x: this.npcs[0].position.x, z: this.npcs[0].position.z, clamp: true });
+    const marker = this.campaign.getMarkerFor('silas') || ms.getMarkerFor('silas');
+    if (marker && this.npcs[0].active) icons.push({ type: marker === 'ready' ? 'npcReady' : 'npc', x: this.npcs[0].position.x, z: this.npcs[0].position.z, clamp: true });
+    for (const w of this.director.waypoints) icons.push({ type: 'objective', x: w.x, z: w.z, clamp: true });   // objetivo de la campaña (rombo dorado)
     const rescue = this.bandits.ambush.radarPos;
     if (rescue) icons.push({ type: 'event', x: rescue.x, z: rescue.z, clamp: true });
     for (const a of this.wildlife.animals) {
       const d = distXZ(a.position, pos);
       if (!a.alive) { if (!a.skinned && d < 400) icons.push({ type: 'carcass', x: a.position.x, z: a.position.z, clamp: true }); continue; }
-      if (a.species === 'deer' && d < 60) icons.push({ type: 'deer', x: a.position.x, z: a.position.z, clamp: false });
-      if (a.species === 'wolf' && d < 50) icons.push({ type: 'wolf', x: a.position.x, z: a.position.z, clamp: false });
+      const kind = a.radarKind || a.species;
+      if (kind === 'deer' && d < 60) icons.push({ type: 'deer', x: a.position.x, z: a.position.z, clamp: false });
+      if (kind === 'wolf' && d < 50) icons.push({ type: 'wolf', x: a.position.x, z: a.position.z, clamp: false });
     }
     for (const g of this.bandits.gunmen) {
       if (!g.active || !g.alive || g.state === 'jailed') continue;

@@ -18,7 +18,8 @@ class TouchControls {
     this.stick = { id: null, ox: 0, oy: 0 };
     this.look = { id: null, x: 0, y: 0 };
     this.fireId = null; this.aimOn = false; this.actKey = 'KeyE';
-    this._on = false; this._dlg = false;
+    this.crouchBtn = document.getElementById('tc-crouch');
+    this._on = false; this._dlg = false; this._duel = false; this._mercy = false;
     this._bindZones(); this._bindButtons();
     this.ui.onPrompt = (key, text) => this._onPrompt(key, text);
     // Evita zoom por pellizco / doble toque y el menú contextual en iOS.
@@ -110,8 +111,10 @@ class TouchControls {
     // Disparo: mantener pulsado repite el disparo (la cadencia la limita el arma).
     press(this.fireBtn, (e) => { this.fireId = e.pointerId; input.mouse.left = true; input.mouse.leftPressed = true; },
       () => { this.fireId = null; input.mouse.left = false; });
-    // Apuntar: se activa/desactiva con cada toque.
-    press(this.aimBtn, () => this._setAim(!this.aimOn));
+    // Apuntar: se activa/desactiva con cada toque. En un duelo es "mantener" (el desenfunde es la pulsación).
+    press(this.aimBtn, () => this._setAim(g.mode === 'duel' ? true : !this.aimOn), () => { if (g.mode === 'duel') this._setAim(false); });
+    // Agacharse (sigilo): interruptor.
+    press(this.crouchBtn, () => this._setCrouch(!input.virtual.has('KeyC')));
     press(this.actBtn, () => input.pressKey(this.actKey));
     this.root.querySelectorAll('[data-key]').forEach((b) => press(b, () => input.pressKey(b.dataset.key)));
     const pause = document.getElementById('tc-pause');
@@ -121,9 +124,13 @@ class TouchControls {
     this.aimOn = on; this.input.mouse.right = on;
     this.aimBtn.classList.toggle('on', on);
   }
-  _onPrompt(key, text) {
+  _setCrouch(on) {
+    if (on) this.input.virtual.add('KeyC'); else this.input.virtual.delete('KeyC');
+    this.crouchBtn.classList.toggle('on', on);
+  }
+  _onPrompt(key, text, label = 'ACCIÓN') {
     const b = this.actBtn;
-    if (key) { this.actKey = `Key${key}`; b.querySelector('.g').textContent = key; b.classList.add('show'); }
+    if (key) { this.actKey = `Key${key}`; b.querySelector('.g').textContent = key; b.querySelector('.l').textContent = label; b.classList.add('show'); }
     else b.classList.remove('show');
   }
 
@@ -131,7 +138,7 @@ class TouchControls {
     if (this.stick.id !== null) this._endStick();
     this.look.id = null;
     if (this.fireId !== null) { this.fireId = null; this.input.mouse.left = false; }
-    this._setAim(false);
+    this._setAim(false); this._setCrouch(false);
     this.input.axis.x = 0; this.input.axis.y = 0; this.input.virtual.clear();
     this.root.querySelectorAll('.down').forEach((b) => b.classList.remove('down'));
   }
@@ -139,7 +146,8 @@ class TouchControls {
   // Se llama una vez por fotograma (también en pausa) para mostrar/ocultar los controles según el modo de juego.
   sync() {
     const g = this.game, playing = g.started && !g.paused, m = g.mode;
-    const on = playing && (m === 'explore' || m === 'skinning' || m === 'action');
+    const duel = playing && m === 'duel';
+    const on = playing && (m === 'explore' || m === 'skinning' || m === 'action' || duel);
     const dlg = playing && m === 'dialogue';
     if (on !== this._on || dlg !== this._dlg) {
       this._on = on; this._dlg = dlg;
@@ -147,7 +155,12 @@ class TouchControls {
       cl.toggle('tc-on', on); cl.toggle('tc-dialogue', dlg);
       if (!on) this._releaseAll();
     }
-    if (on && this.fireId !== null) { this.input.mouse.left = true; this.input.mouse.leftPressed = true; }
+    if (duel !== this._duel) { this._duel = duel; this._setAim(false); this._mercy = false; }
+    if (duel) {   // en un duelo, perdonar al rival es la tecla X
+      const mercy = !!(g.duel.cfg && g.duel.cfg.mercy);
+      if (mercy !== this._mercy) { this._mercy = mercy; this._onPrompt(mercy ? 'X' : null, '', 'PERDONAR'); }
+    }
+    if (on && this.fireId !== null && !g.deadEye.active) { this.input.mouse.left = true; this.input.mouse.leftPressed = true; }
   }
 }
 

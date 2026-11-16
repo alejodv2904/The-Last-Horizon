@@ -117,3 +117,7 @@ html.touch #inv-close { margin:10px 0 0 auto; display:block; }
 #rotate-notice .rt { font-family:'Rye', serif; font-size:28px; color:var(--gold); margin-top:34px; letter-spacing:2px; }
 #rotate-notice .rs { font-size:17px; opacity:.85; margin-top:10px; line-height:1.4; }
 #rotate-notice .btn { margin-top:26px; }
+
+/* ---------- Fase 5: sigilo, Dead Eye, duelos, pausa y ranuras ---------- */
+#tc-crouch { width:var(--A); height:var(--A); right:calc(var(--sr) + 22px + (var(--F) - var(--A)) / 2); bottom:calc(var(--sb) + 22px + var(--F) + 12px + var(--A) + 10px); }
+@media (max-height: 380px) { #tc-crouch { width:42px; height:42px; } #tc-crouch .l { display:none; } }

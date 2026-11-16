@@ -46,6 +46,7 @@ class UIManager {
     this._prompt = null; this._typing = null; this._bannerTimer = null; this._hitTimer = null; this._saveTimer = null;
     this._cache = {};
     this._shopHandler = null;
+    this._init5b();
     this.el.shop.addEventListener('click', (e) => {
       const b = e.target.closest('[data-action]');
       if (b && this._shopHandler && !b.disabled) this._shopHandler(b.dataset.action, b.dataset.id);
@@ -74,7 +75,9 @@ class UIManager {
     setTimeout(() => { d.classList.add('out'); setTimeout(() => d.remove(), 650); }, 4200);
   }
   setTracker(data) {
-    const t = this.el.tracker;
+    const t = this.el.tracker, key = data ? JSON.stringify(data) : '';
+    if (key === this._trackerKey) return;   // sin cambios: no se toca el DOM (la campaña lo refresca cada 0.4 s)
+    this._trackerKey = key;
     t.innerHTML = '';
     if (!data) return;
     const title = document.createElement('div'); title.className = 'title'; title.textContent = data.title; t.appendChild(title);
@@ -280,6 +283,81 @@ class UIManager {
     });
   }
 
+
+  /* ---------- Fase 5B: Dead Eye, duelo, tarjetas de capítulo, créditos, clima ---------- */
+  _init5b() {
+    const $ = this.$;
+    Object.assign(this.el, {
+      deadCore: $('deadeye-core'), deadArc: $('deadeye-arc'), duel: $('duel-ui'), duelName: $('duel-name'), duelSub: $('duel-sub'), duelFlash: $('duel-flash'),
+      duelGauge: $('duel-gauge'), duelFill: $('duel-gauge').querySelector('.fill'), duelZone: $('duel-gauge').querySelector('.zone'), duelPromptEl: $('duel-prompt'),
+      card: $('chapter-card'), ccKicker: $('cc-kicker'), ccTitle: $('cc-title'), ccSub: $('cc-sub'), credits: $('credits'), creditsRoll: $('credits-roll'), creditsSkip: $('credits-skip'),
+    });
+    this.marks = [...document.querySelectorAll('#de-marks .de-mark')];
+  }
+  // Núcleo de Dead Eye (junto a salud y resistencia)
+  setDeadEye(v, active) {
+    this._core(this.el.deadCore, this.el.deadArc, 'dead', v, false);
+    this._set('deActive', !!active, (on) => this.el.deadCore.classList.toggle('active', on));
+  }
+  // Cruces rojas de los objetivos marcados (elementos DOM reutilizados: nunca se crean ni se destruyen en partida)
+  setMark(i, x, y, show) {
+    const m = this.marks[i]; if (!m) return;
+    if (!show) { if (m._on) { m.style.display = 'none'; m._on = false; } return; }
+    if (!m._on) { m.style.display = 'block'; m._on = true; }
+    m.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
+  }
+  clearMarks() { this.marks.forEach((m, i) => this.setMark(i, 0, 0, false)); }
+
+  // Interfaz de Duelo del Oeste
+  duelShow(name, sub) {
+    this.el.duelName.textContent = name; this.el.duelSub.textContent = sub || '';
+    this.el.duel.classList.add('show'); this._duelSweet = null;
+  }
+  duelHide() { this.el.duel.classList.remove('show'); this.el.duelPromptEl.textContent = ''; }
+  duelPrompt(t) {
+    if (this.touch) t = t.replace('Mantén el CLIC IZQUIERDO', 'Mantén DISPARAR').replace('Clic derecho o ESPACIO: desenfunda', 'Toca APUNTAR: desenfunda');
+    this.el.duelPromptEl.textContent = t;
+  }
+  duelGauge(value, sweet, jitter) {
+    if (!this._duelSweet) { this._duelSweet = true; this.el.duelZone.style.left = `${sweet[0]}%`; this.el.duelZone.style.width = `${sweet[1] - sweet[0]}%`; }
+    this.el.duelFill.style.width = `${Math.max(0, Math.min(100, value)).toFixed(1)}%`;
+    this._set('duelJit', !!jitter, (j) => this.el.duelGauge.classList.toggle('jitter', j));
+  }
+  duelFlash(text) {
+    const f = this.el.duelFlash; f.textContent = text; f.classList.remove('pop'); void f.offsetWidth; f.classList.add('pop');
+  }
+
+  // Tarjeta de capítulo: pantalla negra, tipografía Western (Rye). `onBlack` se ejecuta con la pantalla totalmente negra
+  // (aquí se mueve el mundo: campamento, protagonista…). `done` cuando la tarjeta termina de desvanecerse.
+  showCard(c, done, onBlack) {
+    const e = this.el;
+    e.ccKicker.textContent = c.kicker; e.ccTitle.textContent = c.title; e.ccSub.textContent = c.sub || '';
+    e.card.classList.remove('show'); void e.card.offsetWidth; e.card.classList.add('show'); this.hidePrompt();
+    setTimeout(() => { if (onBlack) onBlack(); }, 1400);
+    setTimeout(() => e.card.classList.remove('show'), (1.4 + c.hold) * 1000);
+    setTimeout(() => { if (done) done(); }, (1.4 + c.hold + 1.4) * 1000);
+  }
+  // Créditos finales: lista de { h } títulos, { s, t } entradas o '' (espacio). Avanza sola; se puede continuar con el botón.
+  showCredits(lines, done) {
+    const e = this.el, roll = e.creditsRoll; roll.innerHTML = '';
+    lines.forEach((l) => {
+      const d = document.createElement('div');
+      if (!l) { d.style.height = '34px'; } else if (l.h) { d.className = 'cr-h'; d.textContent = l.h; } else { if (l.s) { const s = document.createElement('div'); s.className = 'cr-s'; s.textContent = l.s; d.appendChild(s); } if (l.t) { const t = document.createElement('div'); t.className = 'cr-t'; t.textContent = l.t; d.appendChild(t); } }
+      roll.appendChild(d);
+    });
+    const dur = Math.max(30, lines.length * 3.4);
+    roll.style.animation = 'none'; void roll.offsetWidth; roll.style.animation = `creditsRoll ${dur}s linear forwards`;
+    e.credits.classList.add('show'); e.creditsSkip.classList.remove('show');
+    let finished = false;
+    const end = () => { if (finished) return; finished = true; e.credits.classList.remove('show'); e.creditsSkip.onclick = null; roll.onanimationend = null; setTimeout(() => done && done(), 1500); };
+    roll.onanimationend = end; e.creditsSkip.onclick = end;
+    setTimeout(() => e.creditsSkip.classList.add('show'), 4000);
+  }
+  // Clima/peligro ambiental como overlay CSS (gratis para la GPU): cold | heat | storm | fever | fire | null
+  setWeather(kind) {
+    this._set('wx', kind || '', (k) => { ['cold', 'heat', 'storm', 'fever', 'fire'].forEach((n) => document.body.classList.toggle(`wx-${n}`, n === k)); });
+  }
+
   setFps(text) { this.el.fps.textContent = text; }
   update(dt) {
     if (this._typing && this._typing.shown < this._typing.text.length) {
@@ -348,6 +426,7 @@ class UIManager {
           ctx.fillStyle = '#fff'; ctx.font = 'bold 8px Georgia'; ctx.fillText('☠', x, y + 2); break;
         case 'law': ctx.fillStyle = '#6aa8ff'; ctx.beginPath(); ctx.arc(x, y, 3.6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); break;
         case 'event': ctx.fillStyle = '#ffd860'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1a1209'; ctx.font = 'bold 11px Georgia'; ctx.fillText('?', x, y + 0.5); break;
+        case 'objective': ctx.fillStyle = '#ffd860'; ctx.strokeStyle = '#1a1209'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 6, y); ctx.closePath(); ctx.fill(); ctx.stroke(); break;
         case 'board': ctx.fillStyle = '#d8c496'; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.fillStyle = '#7a1810'; ctx.font = 'bold 8px Georgia'; ctx.fillText('$', x, y + 0.5); break;
         default: break;
       }

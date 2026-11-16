@@ -5,7 +5,9 @@ import { clamp, lerp, damp, dampAngle, smoothstep } from '../core/MathUtils.js';
 import { makeGlowTexture } from '../render/GeometryKit.js';
 import { PALETTES, buildHumanoid, poseHumanoid } from './CharacterFactory.js';
 
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _dir = new THREE.Vector3(), _org = new THREE.Vector3(), _nrm = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const DE_TINT = new THREE.Color(0xff5a30);
+const UNMARKABLE = new Set(['surrender', 'captive', 'jailed', 'dead']);
 
 class PlayerController {
   constructor(game) {
@@ -22,8 +24,9 @@ class PlayerController {
     this.stamina = 100; this.exhausted = false; this.staminaDelay = 0;
     this.health = CONFIG.PLAYER_MAX_HEALTH; this.lastHurt = 99; this.healPool = 0;
     this.mag = CONFIG.RIFLE_MAG; this.cooldown = 0; this.reloadTimer = 0; this.readyTimer = 0;
-    this.isAiming = false; this.isRunning = false; this.isMoving = false;
-    this.riding = false; this.faceTarget = null;
+    this.isAiming = false; this.isRunning = false; this.isMoving = false; this.isCrouching = false;
+    this.riding = false; this.faceTarget = null; this.invulnerable = false; this.paletteKey = 'player';
+    this._hit = { dist: 0, point: new THREE.Vector3(), type: 'none', animal: null, actor: null, object: null };
     this.cam = { dist: 4.3, side: 0.65, height: 1.62, fov: 62 };
     this.lastStepSign = 1;
     this.raycaster = new THREE.Raycaster();
@@ -45,10 +48,16 @@ class PlayerController {
     this.flashTimer = 0;
     this.muzzleLight = new THREE.PointLight(0xffb060, 0, 14, 2);
     this.game.scene.add(this.muzzleLight);
-    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 1], 3));
-    this.tracer = new THREE.Line(tg, new THREE.LineBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0, depthWrite: false }));
-    this.tracer.frustumCulled = false; this.game.scene.add(this.tracer);
-    this.tracerTimer = 0;
+  }
+
+  // Cambia el aspecto del protagonista (Epílogos: Wren). Reconstruye el modelo y recoloca el fogonazo en el nuevo cañón.
+  setAppearance(key) {
+    if (key === this.paletteKey || !PALETTES[key]) return;
+    const g = this.game, old = this.model;
+    old.meshes.forEach((m) => m.geometry.dispose());
+    g.scene.remove(old.root); this.flash.parent && this.flash.parent.remove(this.flash);
+    this.model = buildHumanoid(PALETTES[key], true); this.root = this.model.root; this.root.rotation.order = 'YXZ';
+    g.scene.add(this.root); this.model.muzzle.add(this.flash); this.paletteKey = key;
   }
 
   get ammoReserve() { return this.game.inventory.count('ammo'); }
@@ -60,7 +69,7 @@ class PlayerController {
   update(dt) {
     const g = this.game, input = g.input, canAct = g.mode === 'explore' && g.started;
     const sens = CONFIG.MOUSE_SENS * (this.isAiming ? 0.55 : 1);
-    if (canAct) {
+    if (canAct && !g.deadEye.executing) {
       this.yaw -= input.mouse.dx * sens;
       this.pitch = clamp(this.pitch - input.mouse.dy * sens, -0.95, 0.65);
     }
@@ -73,9 +82,10 @@ class PlayerController {
         this.mag += take; g.inventory.remove('ammo', take, true);
       }
     }
-    this.isAiming = canAct && input.mouse.right && this.reloadTimer <= 0;
+    this.isAiming = canAct && (input.mouse.right || g.deadEye.active) && this.reloadTimer <= 0;
+    this.isCrouching = canAct && !this.riding && !this.isAiming && (input.isDown('KeyC') || input.isDown('ControlLeft'));
     this.aimBlend = damp(this.aimBlend, (this.isAiming || this.readyTimer > 0) ? 1 : 0, 12, dt);
-    this.crouchBlend = damp(this.crouchBlend, (g.mode === 'skinning' || g.mode === 'action') ? 1 : 0, 8, dt);
+    this.crouchBlend = damp(this.crouchBlend, (g.mode === 'skinning' || g.mode === 'action') ? 1 : this.isCrouching ? 0.62 : 0, 8, dt);
     this.rideBlend = damp(this.rideBlend, this.riding ? 1 : 0, 10, dt);
     this.lastHurt += dt;
     // Regeneración lenta fuera de combate + curación de tónicos (se aplica en ~2 s, no de golpe).
@@ -103,19 +113,20 @@ class PlayerController {
 
     if (canAct) {
       if (input.wasPressed('KeyR')) this.startReload();
-      if (input.mouse.leftPressed) this.tryFire();
+      if (input.mouse.leftPressed && !g.deadEye.active) this.tryFire();
     }
+    if (!this.riding && this.speedNorm > 0.35 && g.mode === 'explore') g.fx.impact.footprint(this.position.x, this.position.y, this.position.z, this.heading, 1.7, false);
     this._updateWeaponFX(dt);
     this.recoil = damp(this.recoil, 0, 7, dt);
   }
 
   _updateOnFoot(dt, canAct) {
     const g = this.game, input = g.input;
-    const wantsRun = canAct && this.isMoving && input.isDown('ShiftLeft') && !this.isAiming && !this.exhausted;
+    const wantsRun = canAct && this.isMoving && input.isDown('ShiftLeft') && !this.isAiming && !this.exhausted && !this.isCrouching;
     if (wantsRun) { this.stamina = Math.max(0, this.stamina - 13 * dt); this.staminaDelay = 1.0; if (this.stamina <= 0) this.exhausted = true; }
     else { this.staminaDelay -= dt; if (this.staminaDelay <= 0) this.stamina = Math.min(100, this.stamina + 20 * dt); if (this.stamina > 30) this.exhausted = false; }
     this.isRunning = wantsRun;
-    const targetSpeed = !this.isMoving ? 0 : this.isAiming ? CONFIG.AIM_SPEED : wantsRun ? CONFIG.RUN_SPEED : CONFIG.WALK_SPEED;
+    const targetSpeed = !this.isMoving ? 0 : this.isAiming ? CONFIG.AIM_SPEED : wantsRun ? CONFIG.RUN_SPEED : this.isCrouching ? CONFIG.WALK_SPEED * 0.5 : CONFIG.WALK_SPEED;
     this.velocity.x = damp(this.velocity.x, this._dir.x * targetSpeed, 9, dt);
     this.velocity.z = damp(this.velocity.z, this._dir.z * targetSpeed, 9, dt);
     this._move(dt);
@@ -130,7 +141,7 @@ class PlayerController {
     const cycle = lerp(2.5, 3.6, this.runBlend);
     this.phase += dt * (speed / cycle) * Math.PI * 2;
     const sign = Math.sin(this.phase) >= 0 ? 1 : -1;
-    if (sign !== this.lastStepSign && speed > 0.6) g.audio.playFootstep(this.runBlend > 0.5);
+    if (sign !== this.lastStepSign && speed > 0.6 && !this.isCrouching) g.audio.playFootstep(this.runBlend > 0.5);
     this.lastStepSign = sign;
   }
 
@@ -197,10 +208,12 @@ class PlayerController {
     this.health = CONFIG.PLAYER_MAX_HEALTH; this.stamina = 100; this.lastHurt = 99; this.healPool = 0;
   }
   heal(amount) { this.healPool += amount; }
+  // Dirección de mira actual de la cámara (reutiliza un vector; cópialo si lo guardas).
+  aimDirection(out = _dir) { return this.game.camera.getWorldDirection(out); }
 
   takeDamage(amount, fromPos) {
     const g = this.game;
-    if (g.mode === 'dead' || !g.started) return;
+    if (g.mode === 'dead' || !g.started || this.invulnerable) return;
     this.health = Math.max(0, this.health - amount);
     this.lastHurt = 0; this.shake = 1;
     g.ui.damageFlash();
@@ -244,64 +257,124 @@ class PlayerController {
     if (this.cooldown > 0 || this.reloadTimer > 0) return;
     if (this.mag <= 0) { g.audio.playDryFire(); this.cooldown = 0.35; this.startReload(); return; }
     this.mag--; this.cooldown = CONFIG.RIFLE_COOLDOWN; this.readyTimer = 1.4;
-    const cam = g.camera, dir = new THREE.Vector3();
+    const cam = g.camera, dir = _dir;
     cam.getWorldDirection(dir);
     const minSpread = g.upgrades.has('barrel') ? 0.001 : 0.002;
     const spread = lerp(0.045, minSpread, this.aimBlend) + this.speedNorm * (this.riding ? 0.03 : 0.015);
     dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2;
     dir.normalize();
-    const origin = cam.position.clone();
-    const hit = this._resolveShot(origin, dir);
+    const hit = this._resolveShot(_org.copy(cam.position), dir);
+    this._muzzleFx(hit.point, null);
+    this.recoil += 0.05;
+    g.audio.playGunshot();
+    g.bus.emit('gunshot', { position: this.position.clone() });
+    this._applyHit(hit, dir, 1);
+    if (this.mag === 0 && this.ammoReserve > 0) setTimeout(() => this.startReload(), 450);
+  }
 
+  // Fogonazo, luz del cañón, estela (pool) y humo. `tint`: color de la estela (Dead Eye = rojizo).
+  _muzzleFx(point, tint) {
+    const g = this.game;
     this.model.muzzle.getWorldPosition(this._muzzle);
     this.flash.visible = true; this.flashTimer = 0.055; this.flash.rotation.z = Math.random() * Math.PI;
     this.flash.scale.setScalar(0.8 + Math.random() * 0.5);
     this.muzzleLight.position.copy(this._muzzle); this.muzzleLight.intensity = 14;
-    const tp = this.tracer.geometry.attributes.position;
-    tp.setXYZ(0, this._muzzle.x, this._muzzle.y, this._muzzle.z); tp.setXYZ(1, hit.point.x, hit.point.y, hit.point.z); tp.needsUpdate = true;
-    this.tracer.material.opacity = 0.7; this.tracerTimer = 0.09;
-    this.recoil += 0.05;
+    g.fx.impact.tracer(this._muzzle, point, tint ? 0.16 : 0.09, tint);
     g.fx.dust.burst(this._muzzle, 5, { color: 0xb8b0a0, size: 0.25, life: 0.8, speed: 0.5, up: 1, alpha: 0.35, grow: 3, drag: 1.5 });
-    g.audio.playGunshot();
-    g.bus.emit('gunshot', { position: this.position.clone() });
+  }
 
+  // Aplica el resultado de un disparo (daño + efectos + recarga de Dead Eye). Compartido por el disparo normal y la ráfaga de Dead Eye.
+  _applyHit(hit, dir, dmgMul) {
+    const g = this.game;
+    let headshot = false, killed = false, kind = 'none';
     if (hit.animal) {
-      hit.animal.takeDamage(this.damage, dir);
-      g.fx.dust.burst(hit.point, 14, { color: 0x8a1a12, size: 0.09, life: 0.7, speed: 2.2, up: 1.2, gravity: 9, alpha: 0.95 });
-      g.ui.hitMarker();
+      const a = hit.animal; kind = 'animal';
+      headshot = hit.point.y - a.position.y > (a.species === 'wolf' ? 0.85 : a.species === 'bear' ? 1.5 : 1.4);
+      a.takeDamage(this.damage * dmgMul * (headshot ? 1.6 : 1), dir); killed = !a.alive;
+      g.fx.impact.hit(hit.point, null, 'flesh'); g.ui.hitMarker(headshot);
     } else if (hit.actor) {
-      hit.actor.takeDamage(this.damage, dir, hit.point, 'player');
-      g.fx.dust.burst(hit.point, 12, { color: 0x8a1a12, size: 0.09, life: 0.7, speed: 2.2, up: 1.2, gravity: 9, alpha: 0.95 });
-      g.ui.hitMarker();
+      const ac = hit.actor, was = ac.alive; kind = ac.faction === 'bandit' ? 'bandit' : 'actor';
+      headshot = hit.point.y - ac.position.y > 1.52;
+      ac.takeDamage(this.damage * dmgMul, dir, hit.point, 'player'); killed = was && !ac.alive;
+      g.fx.impact.hit(hit.point, null, 'flesh'); g.ui.hitMarker(headshot);
     } else if (hit.type !== 'none') {
       const isRock = hit.object === g.world.chunks.veg.rock;
-      g.fx.dust.burst(hit.point, 10, { color: isRock ? 0x9a948a : 0x8a7050, size: 0.18, life: 0.9, speed: 1.6, up: 1.5, gravity: 4, alpha: 0.7, grow: 1.5, drag: 1.2 });
-      if (isRock) g.fx.glow.burst(hit.point, 6, { color: 0xffc070, size: 0.04, life: 0.25, speed: 4, up: 1, gravity: 9 });
+      if (hit.type === 'terrain') _nrm.copy(_up); else _nrm.copy(dir).negate();
+      g.fx.impact.hit(hit.point, _nrm, isRock ? 'rock' : 'dirt');
     }
-    if (this.mag === 0 && this.ammoReserve > 0) setTimeout(() => this.startReload(), 450);
+    g.deadEye.onShot({ kind, headshot, killed });
+    g.bus.emit('player:shot', { kind, headshot, killed, animal: hit.animal, actor: hit.actor, object: hit.object, point: hit.point });
   }
 
   _resolveShot(origin, dir) {
-    const g = this.game, maxDist = this.range;
-    let best = { dist: maxDist, point: origin.clone().addScaledVector(dir, maxDist), type: 'none', animal: null, actor: null, object: null };
+    const g = this.game, maxDist = this.range, best = this._hit;
+    best.dist = maxDist; best.point.copy(origin).addScaledVector(dir, maxDist); best.type = 'none'; best.animal = null; best.actor = null; best.object = null;
     const tT = g.world.raycastTerrain(origin, dir, maxDist);
-    if (tT < best.dist) best = { dist: tT, point: origin.clone().addScaledVector(dir, tT), type: 'terrain', animal: null, actor: null, object: null };
+    if (tT < best.dist) { best.dist = tT; best.point.copy(origin).addScaledVector(dir, tT); best.type = 'terrain'; }
     this.raycaster.set(origin, dir); this.raycaster.near = 0.5; this.raycaster.far = best.dist;
     const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.bandits.getHitboxes(), ...g.townLife.getHitboxes(), ...g.world.solidTargets], false);
     if (hits.length) {
       const h = hits[0], animal = h.object.userData.animal || null, actor = h.object.userData.actor || null;
-      best = { dist: h.distance, point: h.point.clone(), type: animal ? 'animal' : actor ? 'actor' : 'object', animal, actor, object: h.object };
+      best.dist = h.distance; best.point.copy(h.point); best.type = animal ? 'animal' : actor ? 'actor' : 'object'; best.animal = animal; best.actor = actor; best.object = h.object;
     }
     // Las balas también chocan con rocas/cajas/edificios analíticos (círculos y cajas AABB) que no tienen malla propia.
     const sd = g.world.segmentHit(origin.x, origin.y, origin.z, origin.x + dir.x * best.dist, origin.y + dir.y * best.dist, origin.z + dir.z * best.dist);
-    if (sd >= 0 && sd * best.dist < best.dist - 0.01) best = { dist: sd * best.dist, point: origin.clone().addScaledVector(dir, sd * best.dist), type: 'object', animal: null, actor: null, object: null };
+    if (sd >= 0 && sd * best.dist < best.dist - 0.01) { best.dist = sd * best.dist; best.point.copy(origin).addScaledVector(dir, best.dist); best.type = 'object'; best.animal = null; best.actor = null; best.object = null; }
     return best;
+  }
+
+  /* ---------------- Dead Eye ---------------- */
+  // ¿Qué presa u hostil está bajo la mira? (para marcar con cruces rojas). Devuelve { kind, entity } o null.
+  findMarkTarget() {
+    const g = this.game, cam = g.camera;
+    cam.getWorldDirection(_dir); _org.copy(cam.position);
+    this.raycaster.set(_org, _dir); this.raycaster.near = 0.5; this.raycaster.far = this.range;
+    const hits = this.raycaster.intersectObjects([...g.wildlife.getHitboxes(), ...g.bandits.getHitboxes()], false);
+    for (const h of hits) {
+      const animal = h.object.userData.animal, actor = h.object.userData.actor;
+      if (animal && animal.alive) return { kind: 'animal', entity: animal };
+      if (actor && actor.alive && actor.hostile && !UNMARKABLE.has(actor.state)) return { kind: 'actor', entity: actor };
+    }
+    return null;
+  }
+  // Punto del cuerpo al que apunta una marca (pecho/cabeza) y, de paso, su posición de pantalla se calcula fuera.
+  markPoint(t, out) {
+    if (t.kind === 'animal') return t.entity.getCenter(out);
+    return out.set(t.entity.position.x, t.entity.position.y + 1.45, t.entity.position.z);
+  }
+  // Un disparo de la ráfaga: instantáneo, sin dispersión ni retroceso, daño letal. Devuelve false si no queda munición.
+  fireDeadEye(t) {
+    const g = this.game;
+    if (this.mag <= 0) return false;
+    this.mag--; this.readyTimer = 1.4;
+    const point = this.markPoint(t, _v);
+    this.model.muzzle.getWorldPosition(this._muzzle);
+    const dir = _dir.copy(point).sub(this._muzzle).normalize();
+    this._muzzleFx(point, DE_TINT);
+    g.audio.playGunshot(0.8);
+    g.bus.emit('gunshot', { position: this.position.clone() });
+    const hit = this._hit; hit.point.copy(point); hit.type = t.kind; hit.object = null;
+    hit.animal = t.kind === 'animal' ? t.entity : null; hit.actor = t.kind === 'actor' ? t.entity : null;
+    this._applyHit(hit, dir, 5);
+    return true;
+  }
+
+  // Disparo escenificado de un duelo: 'kill' | 'wound' | 'miss' | 'air'. No consume munición ni dispara balas reales.
+  duelShot(entity, outcome) {
+    const g = this.game;
+    if (outcome === 'air') { this.model.muzzle.getWorldPosition(_v); _v.y += 30; }
+    else {
+      this.markPoint({ kind: 'actor', entity }, _v);
+      if (outcome === 'miss') { _v.x += (Math.random() - 0.5) * 2.6; _v.y += (Math.random() - 0.3) * 1.2; }
+    }
+    this.readyTimer = 1.6; this.recoil += 0.05;
+    this._muzzleFx(_v, null); g.audio.playGunshot();
+    if (outcome === 'kill' || outcome === 'wound') g.fx.impact.hit(_v, null, 'flesh');
   }
 
   _updateWeaponFX(dt) {
     if (this.flashTimer > 0) { this.flashTimer -= dt; if (this.flashTimer <= 0) this.flash.visible = false; }
     this.muzzleLight.intensity = damp(this.muzzleLight.intensity, 0, 25, dt);
-    if (this.tracerTimer > 0) { this.tracerTimer -= dt; this.tracer.material.opacity = Math.max(0, this.tracerTimer / 0.09) * 0.7; }
   }
 }
 

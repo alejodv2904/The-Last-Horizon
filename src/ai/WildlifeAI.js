@@ -4,11 +4,12 @@ import { CONFIG } from '../core/Config.js';
 import { distXZ, mulberry32 } from '../core/MathUtils.js';
 import { Deer, DEER_STATE } from './Deer.js';
 import { Wolf } from './Wolf.js';
+import { makeAnimal } from './SpeciesVariants.js';
 
 class WildlifeAI {
   constructor(game) {
     this.game = game;
-    const rand = mulberry32(2024);
+    const rand = mulberry32(2024); this._rand = mulberry32(7771);
     this.deer = []; this.wolves = [];
     CONFIG.HERDS.forEach((h) => { for (let i = 0; i < h.count; i++) this.deer.push(new Deer(game, h, rand)); });
     CONFIG.WOLF_PACKS.forEach((p) => { for (let i = 0; i < p.count; i++) this.wolves.push(new Wolf(game, p, i, rand)); });
@@ -36,6 +37,23 @@ class WildlifeAI {
       a.update(dt, ctx);
     }
     this.activeCount = active;
+  }
+
+  // Fauna de misión (campaña): nace en (x, z) y se añade a las listas de IA. Devuelve los animales creados.
+  spawnTemp(species, x, z, count = 1) {
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const a = makeAnimal(this.game, species, x + (Math.random() - 0.5) * 16, z + (Math.random() - 0.5) * 16, this._rand);
+      this.animals.push(a); (a.radarKind === 'wolf' || a.species === 'wolf' ? this.wolves : this.deer).push(a); out.push(a);
+    }
+    return out;
+  }
+  despawnTemp(list) {
+    for (const a of list) {
+      for (const arr of [this.animals, this.deer, this.wolves]) { const i = arr.indexOf(a); if (i >= 0) arr.splice(i, 1); }
+      this.game.scene.remove(a.model.root); a.model.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      if (a._tintMat) a._tintMat.dispose();
+    }
   }
 
   onGunshot(pos) {

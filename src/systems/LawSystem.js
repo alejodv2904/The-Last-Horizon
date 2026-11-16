@@ -137,6 +137,12 @@ class LawSystem {
       g.save.save();
     }, 2200);
   }
+  // La campaña elimina al sheriff Reed (duelo del Cap. III): sale de la plaza para siempre y ya no cuenta como agente de la ley.
+  retireSheriff() {
+    const sh = this.sheriff; if (!sh || sh.retired) return;
+    sh.retired = true; sh.active = false; sh.root.visible = false; sh.alertTo = () => {};
+    this.agents = this.agents.filter((a) => a !== sh);
+  }
   respawnIfFar() {
     const p = this.game.player.position;
     this.agents.forEach((a) => { if (!a.alive && a.deadTime > 360 && distXZ(p, this.town.center) > 120) { a.spawn(a.def.x, a.def.z); a.mode = this.level > 0 ? (this.lethal ? 'lethal' : 'arrest') : 'peace'; } });

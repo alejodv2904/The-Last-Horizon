@@ -9,9 +9,11 @@ import { ChunkManager } from './ChunkManager.js';
 import { buildCamp, buildTradingPost } from './Structures.js';
 import { buildTown } from './TownBuilder.js';
 import { buildBanditCamp } from './BanditCamps.js';
+import { buildLandmarks } from './Landmarks.js';
+import { smoothstep } from '../core/MathUtils.js';
 
 const _v = new THREE.Vector3();
-const _lanternColor = new THREE.Color(0xffc070);
+const _lanternColor = new THREE.Color(0xffc070), _biomeFog = new THREE.Color();
 
 class WorldManager {
   constructor(game) {
@@ -25,16 +27,70 @@ class WorldManager {
     this.time = new TimeOfDay(CONFIG.START_HOUR);
     this.elapsed = 0;
     this._emitAcc = { ember: 0, smoke: 0 };
+    this.fogMul = 1; this.limit = CONFIG.WORLD_LIMIT; this._fogCol = new THREE.Color(); this.biomeState = { fogMul: 1, id: null };
     this._buildLights();
     this._buildSky();
     this.chunks = new ChunkManager(this);
+    if (game.settings) this.chunks.applyQuality(game.settings.quality);
     this.solidTargets.push(this.chunks.veg.pine, this.chunks.veg.oak, this.chunks.veg.rock);
-    this.camp = buildCamp(this);
-    this.firePos = this.camp.firePos;
+    // Campamentos reubicables: se construyen bajo demanda; solo uno es visible a la vez (comparten la luz del fuego).
+    this.campLight = new THREE.PointLight(0xff8a3a, 30, 32, 1.6);
+    this.scene.add(this.campLight);
+    this.campSites = {}; this.campSiteId = null;
+    this.setCampSite('cedar');
     this.post = buildTradingPost(this);
     this.town = buildTown(this);
     this.banditCamps = CONFIG.BANDIT_CAMPS.map((def) => buildBanditCamp(this, def));
+    this.landmarks = buildLandmarks(this);
     this.chunks.update({ x: CONFIG.PLAYER_SPAWN.x, z: CONFIG.PLAYER_SPAWN.z }, true);
+  }
+
+  /* ---------------- Campamento reubicable (Fase 5B) ---------------- */
+  // Muda el campamento a otro sitio de CONFIG.CAMP_SITES: oculta el actual (sin recompilar luces), muestra/construye el nuevo
+  // y actualiza obstáculos y blancos de disparo. Devuelve el sitio activo ({ site, firePos, ... }).
+  setCampSite(id) {
+    if (!CONFIG.CAMP_SITES[id] || id === this.campSiteId) return this.camp;
+    const prev = this.campSites[this.campSiteId];
+    if (prev) {
+      prev.objects.forEach((o) => { o.visible = false; });
+      prev.obstacles.forEach((o) => { const i = this.staticObstacles.indexOf(o); if (i >= 0) this.staticObstacles.splice(i, 1); });
+      const k = this.solidTargets.indexOf(prev.mesh); if (k >= 0) this.solidTargets.splice(k, 1);
+    }
+    let site = this.campSites[id];
+    if (!site) { site = buildCamp(this, CONFIG.CAMP_SITES[id]); this.campSites[id] = site; }
+    else { site.objects.forEach((o) => { o.visible = true; }); this.solidTargets.push(site.mesh); }
+    site.fedProps.visible = id === 'cedar' && this.flags.has('camp_fed');
+    site.obstacles.forEach((o) => this.staticObstacles.push(o));
+    this.campSiteId = id; this.camp = site; this.firePos = site.firePos;
+    this.campLight.position.set(site.firePos.x, site.firePos.y + 1.3, site.firePos.z);
+    return site;
+  }
+  // Modo post-juego: terreno sin fronteras. El jugador puede alejarse indefinidamente (los chunks se siguen generando).
+  setInfinite(on) {
+    this.limit = on ? 1e7 : CONFIG.WORLD_LIMIT;
+    this.chunks.setInfinite(on);
+  }
+  // Calidad gráfica: sombras (on/off y resolución), multiplicador de niebla, distancia de chunks y vegetación.
+  setQuality(q) {
+    this.fogMul = q.fogMul;
+    const r = this.game.renderer, was = r.shadowMap.enabled;
+    r.shadowMap.enabled = q.shadows; this.sun.castShadow = q.shadows;
+    if (this.sun.shadow.mapSize.x !== q.shadowSize) { this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
+    if (was !== q.shadows) this.scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); });
+    this.chunks.applyQuality(q);
+  }
+  // Mezcla de biomas en un punto (niebla del pantano, nieve…): { fogMul, color (Color), w (0..1) }
+  biomeAt(x, z) {
+    let fm = 1, wTot = 0, id = null, best = 0; this._fogCol.set(0);
+    for (const b of this.chunks.biomes) {
+      const w = 1 - smoothstep(b.r * 0.62, b.r * 1.02, Math.hypot(x - b.x, z - b.z));
+      if (w <= 0) continue;
+      fm *= 1 + (b.fogMul - 1) * w; this._fogCol.r += ((b.fog >> 16) & 255) / 255 * w; this._fogCol.g += ((b.fog >> 8) & 255) / 255 * w; this._fogCol.b += (b.fog & 255) / 255 * w;
+      wTot += w; if (w > best) { best = w; id = b.id; }
+    }
+    this.biomeState.fogMul = fm; this.biomeState.id = best > 0.35 ? id : null; this.biomeState.w = Math.min(1, wTot);
+    if (wTot > 0) this._fogCol.multiplyScalar(1 / wTot);
+    return this.biomeState;
   }
 
   getHeightAt(x, z) { return this.gen.getHeightAt(x, z); }
@@ -189,7 +245,7 @@ class WorldManager {
     return out;
   }
   clampToWorld(p) {
-    const L = CONFIG.WORLD_LIMIT;
+    const L = this.limit;
     p.x = Math.max(-L, Math.min(L, p.x)); p.z = Math.max(-L, Math.min(L, p.z));
   }
 
@@ -269,9 +325,12 @@ class WorldManager {
     this.sun.color.copy(s.sun);
     this.sun.intensity = s.sunI * s.lightIntensityScale;
     this.hemi.color.copy(s.hs); this.hemi.groundColor.copy(s.hg); this.hemi.intensity = s.hI;
-    this.scene.fog.color.copy(s.fog); this.scene.fog.density = s.fd;
+    const bio = this.biomeAt(playerPos.x, playerPos.z);
+    this.scene.fog.color.copy(s.fog);
+    if (bio.w > 0) this.scene.fog.color.lerp(_biomeFog.copy(this._fogCol).multiply(s.fog).multiplyScalar(1.6), bio.w * 0.55);
+    this.scene.fog.density = s.fd * this.fogMul * bio.fogMul;
     const u = this.skyUniforms;
-    u.topColor.value.copy(s.top); u.horizonColor.value.copy(s.fog); u.sunColor.value.copy(s.sun);
+    u.topColor.value.copy(s.top); u.horizonColor.value.copy(this.scene.fog.color); u.sunColor.value.copy(s.sun);
     u.sunDir.value.copy(s.sunDir); u.moonDir.value.copy(s.moonDir); u.nightFactor.value = s.night;
     this.starMat.opacity = s.night * 0.9;
     this.stars.rotation.y += dt * 0.004;
@@ -289,7 +348,7 @@ class WorldManager {
     c.flames.visible = nearCamp;
     if (nearCamp) {
       const flick = this.noise.noise(t * 3.1, 0.5) * 0.5 + this.noise.noise(t * 7.3, 3.1) * 0.25;
-      c.fireLight.intensity = (26 + flick * 14) * (0.55 + s.night * 0.7);
+      c.fireLight.intensity = (26 + flick * 14) * (0.55 + s.night * 0.7) * (c.style === 'ruins' ? 0.3 : 1);
       c.flameMeshes.forEach((m, i) => {
         const k = 1 + this.noise.noise(t * (4 + i), i * 10) * 0.35;
         m.scale.set(1 + this.noise.noise(t * 5 + i, 2) * 0.15, k, 1 + this.noise.noise(t * 5 + i, 7) * 0.15);
@@ -302,6 +361,7 @@ class WorldManager {
     this.post.lantern.material.color.setScalar(0.5 + s.night * 0.5).multiply(_lanternColor);
     this.town.update(s.night, distXZ(playerPos, this.town.center), t);
     for (const bc of this.banditCamps) bc.update(distXZ(playerPos, bc.center), s.night, t, this.noise);
+    this.landmarks.update(playerPos, s.night);
     return s;
   }
 

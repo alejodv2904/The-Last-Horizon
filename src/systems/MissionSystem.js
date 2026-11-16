@@ -115,7 +115,9 @@ class MissionSystem {
     this.evaluate();
   }
   updateTracker() {
-    const ui = this.game.ui;
+    const ui = this.game.ui, camp = this.game.campaign;
+    // La campaña tiene prioridad en el HUD salvo que haya una misión secundaria o un contrato rastreado.
+    if (camp && camp.started && !this.trackedId && !(this.game.bounties && this.game.bounties.trackerData())) { camp.updateTracker(); return; }
     if (this.trackedId) {
       const id = this.trackedId, m = this.story.missions[id], st = this.states[id];
       const objectives = m.objectives.map((o) => {
