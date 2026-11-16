@@ -2,7 +2,23 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<script>
+  // Dispositivo táctil (móvil/tableta): puntero principal "grueso". Forzable con ?touch=1 o ?touch=0.
+  (function () {
+    var q = location.search, force = /[?&]touch=1/.test(q), off = /[?&]touch=0/.test(q), mm = window.matchMedia;
+    var coarse = mm && mm('(pointer: coarse)').matches, fine = mm && mm('(pointer: fine)').matches;
+    var touch = !off && (force || coarse || ('ontouchstart' in window && !fine));
+    if (touch) document.documentElement.classList.add('touch');
+  })();
+</script>
 <title>The Last Horizon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rye&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
@@ -12,6 +28,8 @@
   html, body { width:100%; height:100%; overflow:hidden; background:#000; color:var(--ink);
     font-family:'IM Fell English', Georgia, 'Times New Roman', serif; user-select:none; }
   #game-root canvas { display:block; width:100vw; height:100vh; }
+  .bar, #dialogue, #banner, #fade { pointer-events:none; }
+  #choices .choice { pointer-events:auto; cursor:pointer; }
   #vignette { position:fixed; inset:0; pointer-events:none; z-index:2;
     background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.5) 100%); }
 
@@ -190,6 +208,7 @@
   body.shopping #hud { opacity:.25; }
   .hidden { display:none !important; }
 </style>
+<link rel="stylesheet" href="./src/ui/touch.css">
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
@@ -246,12 +265,41 @@
   <div class="board-list"></div>
   <div class="shop-foot"><button class="sbtn" data-action="pay">Pagar mi recompensa</button><span class="hint">[E] / [Esc] salir</span><button class="sbtn" data-action="close">Cerrar</button></div>
 </div>
-<div id="inventory"><h2>Alforjas</h2><div id="inv-money"></div><div id="inv-list"></div><div class="inv-hint">[1-9] usar objeto · [Tab] cerrar</div></div>
+<div id="inventory"><h2>Alforjas</h2><div id="inv-money"></div><div id="inv-list"></div><div class="inv-hint d-only">[1-9] usar objeto · [Tab] cerrar</div><button class="sbtn t-only" id="inv-close">Cerrar</button></div>
+
+<!-- Controles táctiles (solo visibles en html.touch) -->
+<div id="touch-layer">
+  <div id="tc-stick"><div class="knob"></div></div>
+  <div class="tc-top">
+    <button class="tc-btn tc-mini" data-key="KeyV" aria-label="Instinto de cazador"><span class="g">◉</span></button>
+    <button class="tc-btn tc-mini" data-key="KeyH" aria-label="Silbar al caballo"><span class="g">♪</span></button>
+    <button class="tc-btn tc-mini" data-key="KeyQ" aria-label="Beber tónico"><span class="g">✚</span></button>
+    <button class="tc-btn tc-mini" data-key="Tab" aria-label="Alforjas"><span class="g">▤</span></button>
+    <button class="tc-btn tc-mini" id="tc-pause" aria-label="Pausa"><span class="g">❚❚</span></button>
+  </div>
+  <button class="tc-btn" id="tc-fire" aria-label="Disparar"><span class="g">✹</span><span class="l">DISPARAR</span></button>
+  <button class="tc-btn" id="tc-aim" aria-label="Apuntar"><span class="g">◎</span><span class="l">APUNTAR</span></button>
+  <button class="tc-btn" id="tc-reload" data-key="KeyR" aria-label="Recargar"><span class="g">⟳</span><span class="l">RECARGA</span></button>
+  <button class="tc-btn" id="tc-act" aria-label="Acción"><span class="g">E</span><span class="l">ACCIÓN</span></button>
+</div>
+
+<div id="rotate-notice">
+  <div class="phone"></div>
+  <div class="rt">Gira tu dispositivo</div>
+  <div class="rs">The Last Horizon se juega en horizontal.<br>Activa la rotación automática de tu móvil.</div>
+  <button class="btn secondary" id="btn-fs">PANTALLA COMPLETA</button>
+</div>
 
 <div class="overlay" id="overlay-start">
   <h1>The Last Horizon</h1>
   <div class="sub">Capítulo I · Valle de Cedar Hollow — Fase 3: Redwood Gulch</div>
-  <div class="controls">
+  <div class="controls t-only">
+    <div><span class="key">Joystick</span> Mover (al borde = correr)</div><div><span class="key">Arrastrar</span> Cámara</div>
+    <div><span class="key">✹</span> Disparar (mantén para repetir)</div><div><span class="key">◎</span> Apuntar (toca para alternar)</div>
+    <div><span class="key">⟳</span> Recargar</div><div><span class="key">E / F</span> Botón de acción contextual</div>
+    <div><span class="key">▤</span> Alforjas (toca un tónico para usarlo)</div><div><span class="key">♪</span> Silbar · <span class="key">◉</span> Instinto · <span class="key">✚</span> Tónico</div>
+  </div>
+  <div class="controls d-only">
     <div><span class="key">W A S D</span> Moverse</div><div><span class="key">Shift</span> Correr</div>
     <div><span class="key">Ratón</span> Cámara</div><div><span class="key">Clic der.</span> Apuntar</div>
     <div><span class="key">Clic izq.</span> Disparar</div><div><span class="key">R</span> Recargar</div>
@@ -266,7 +314,7 @@
 </div>
 <div class="overlay hidden" id="overlay-pause">
   <h1>Pausa</h1>
-  <div class="sub">Haz clic para volver al valle</div>
+  <div class="sub"><span class="d-only">Haz clic para volver al valle</span><span class="t-only">Toca la pantalla para volver al valle</span></div>
 </div>
 
 <script type="module" src="./src/main.js"></script>

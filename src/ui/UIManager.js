@@ -25,6 +25,18 @@ class UIManager {
       bark: $('bark'), barkWho: $('bark').querySelector('.who'), barkTxt: $('bark').querySelector('.txt'),
       quick: $('quick-use'), hitDir: $('hit-dir'), board: $('board'),
     };
+    this.touch = document.documentElement.classList.contains('touch');
+    // Ganchos para la interfaz táctil / Game (se asignan desde fuera)
+    this.onPrompt = null; this.onChoice = null; this.onUseItem = null;
+    this.el.choices.addEventListener('click', (e) => {
+      const c = e.target.closest('.choice');
+      if (c && this.onChoice) this.onChoice(+c.dataset.i);
+    });
+    this.el.invList.addEventListener('click', (e) => {
+      const row = e.target.closest('[data-use]');
+      if (row && this.onUseItem) this.onUseItem(row.dataset.use);
+    });
+    $('inv-close').addEventListener('click', () => this.closeInventory());
     this._barkTimer = null; this._honorTimer = null; this._boardHandler = null; this.inventoryUsable = [];
     this.el.board.addEventListener('click', (e) => {
       const b = e.target.closest('[data-action]');
@@ -45,8 +57,13 @@ class UIManager {
     const v = key + text;
     if (this._prompt === v) return;
     this._prompt = v; this.el.promptKey.textContent = key; this.el.promptText.textContent = text; this.el.prompt.classList.add('show');
+    if (this.onPrompt) this.onPrompt(key, text);
   }
-  hidePrompt() { if (this._prompt === null) return; this._prompt = null; this.el.prompt.classList.remove('show'); }
+  hidePrompt() {
+    if (this._prompt === null) return;
+    this._prompt = null; this.el.prompt.classList.remove('show');
+    if (this.onPrompt) this.onPrompt(null);
+  }
 
   notify(title, sub = '') {
     const d = document.createElement('div'); d.className = 'toast';
@@ -122,7 +139,7 @@ class UIManager {
   showDialogueLine(name, text) {
     this.el.dialogue.classList.add('show');
     this.el.speaker.textContent = name;
-    this.el.choices.innerHTML = ''; this.el.hint.textContent = '[E] continuar';
+    this.el.choices.innerHTML = ''; this.el.hint.textContent = this.touch ? 'Toca para continuar' : '[E] continuar';
     this._typing = { text, shown: 0 };
     this.el.text.textContent = '';
   }
@@ -132,11 +149,11 @@ class UIManager {
     this.el.speaker.textContent = this.story.player.name; this.el.text.textContent = ''; this._typing = null;
     this.el.choices.innerHTML = '';
     list.forEach((txt, i) => {
-      const d = document.createElement('div'); d.className = 'choice' + (disabled[i] ? ' disabled' : '');
+      const d = document.createElement('div'); d.className = 'choice' + (disabled[i] ? ' disabled' : ''); d.dataset.i = i;
       d.innerHTML = `<span class="key">${i + 1}</span><span></span>`;
       d.lastChild.textContent = txt; this.el.choices.appendChild(d);
     });
-    this.el.hint.textContent = 'Pulsa el número para elegir';
+    this.el.hint.textContent = this.touch ? 'Toca una opción' : 'Pulsa el número para elegir';
   }
   hideChoices() { this.el.choices.innerHTML = ''; }
   hideDialogue() { this.el.dialogue.classList.remove('show'); this._typing = null; }
@@ -164,8 +181,11 @@ class UIManager {
     entries.forEach(([id, n]) => {
       const def = this.story.items[id] || { name: id, icon: '•', desc: '' };
       let right = `×${n}`;
-      if (def.use && this.inventoryUsable.length < 9) { this.inventoryUsable.push(id); right = `×${n}  ·  [${this.inventoryUsable.length}] usar`; }
-      this.el.invList.appendChild(this._itemRow(def, right));
+      const usable = !!def.use && this.inventoryUsable.length < 9;
+      if (usable) { this.inventoryUsable.push(id); right = this.touch ? `×${n}  ·  Usar` : `×${n}  ·  [${this.inventoryUsable.length}] usar`; }
+      const row = this._itemRow(def, right);
+      if (usable) { row.dataset.use = id; row.classList.add('usable'); }
+      this.el.invList.appendChild(row);
     });
   }
   _itemRow(def, right, button) {

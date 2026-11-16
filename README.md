@@ -55,6 +55,23 @@ y abre `http://localhost:8765`.
 | T | Acelerar el tiempo |
 | Esc | Pausa |
 
+### Móvil y tableta (modo táctil)
+
+El juego detecta pantallas táctiles y activa solo una interfaz adaptada (en escritorio no cambia nada). Al pulsar «Cabalgar» pide pantalla completa y bloquea la orientación en horizontal; si el navegador no lo permite (p. ej. iPhone), muestra un aviso de «Gira tu dispositivo» y se pausa mientras estés en vertical. Para forzar el modo táctil o desactivarlo: `?touch=1` / `?touch=0` en la URL.
+
+| Control | Acción |
+|---|---|
+| Joystick (mitad izquierda, aparece donde apoyas el pulgar) | Moverse; empujarlo hasta el borde = correr / galopar |
+| Arrastrar (mitad derecha) | Cámara |
+| ✹ Disparar | Disparo (mantener = repetir) |
+| ◎ Apuntar | Activa / desactiva la mira |
+| ⟳ Recarga | Recargar |
+| Botón contextual (E / F) | Aparece cerca de algo con lo que interactuar: hablar, montar, despellejar, comerciar… |
+| ▤ · ✚ · ♪ · ◉ · ❚❚ | Alforjas (tocar un tónico lo usa) · Tónico · Silbar al caballo · Instinto de cazador · Pausa |
+| Tocar la pantalla | Avanzar diálogos; las opciones se tocan directamente |
+
+Notas: en móvil la resolución interna está limitada a 1× y se ajusta sola para mantener la fluidez. Se incluye `manifest.webmanifest` (orientación horizontal y pantalla completa) para poder «Añadir a la pantalla de inicio».
+
 ## Arquitectura
 
 ```

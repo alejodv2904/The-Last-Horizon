@@ -1,6 +1,10 @@
 class InputManager {
-  constructor(canvas, bus) {
+  // opts.touch: dispositivo táctil → sin pointer lock; la cámara y el movimiento llegan desde TouchControls.
+  constructor(canvas, bus, opts = {}) {
     this.canvas = canvas; this.bus = bus;
+    this.touchMode = !!opts.touch;
+    this.axis = { x: 0, y: 0 };            // joystick virtual: x → derecha, y → adelante (-1..1)
+    this.virtual = new Set();              // teclas "mantenidas" por la interfaz táctil (p. ej. ShiftLeft)
     this.keys = new Set(); this.pressed = new Set();
     this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false };
     this.locked = false; this.fallback = false; this.enabled = false;
@@ -13,6 +17,7 @@ class InputManager {
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse.left = false; this.mouse.right = false; });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('mousedown', (e) => {
+      if (this.touchMode) return;   // los toques generan ratón "emulado": se ignora
       if (!this.enabled || !(this.locked || this.fallback)) return;
       if (e.button === 0) { this.mouse.left = true; this.mouse.leftPressed = true; }
       if (e.button === 2) this.mouse.right = true;
@@ -22,6 +27,7 @@ class InputManager {
       if (e.button === 2) this.mouse.right = false;
     });
     document.addEventListener('mousemove', (e) => {
+      if (this.touchMode) return;
       if (!this.enabled || !(this.locked || this.fallback)) return;
       this.mouse.dx += e.movementX || 0; this.mouse.dy += e.movementY || 0;
     });
@@ -43,12 +49,14 @@ class InputManager {
     if (document.pointerLockElement) document.exitPointerLock();
   }
   requestLock() {
+    if (this.touchMode) { this.locked = true; this.bus.emit('pointerlock', true); return; }
     try {
       const p = this.canvas.requestPointerLock();
       if (p && typeof p.catch === 'function') p.catch(() => this._lockFailed());
     } catch (err) { this._lockFailed(); }
   }
-  isDown(code) { return this.keys.has(code); }
+  isDown(code) { return this.keys.has(code) || this.virtual.has(code); }
+  pressKey(code) { this.pressed.add(code); }   // pulsación puntual (botones táctiles)
   wasPressed(code) { return this.pressed.has(code); }
   consume() { this.pressed.clear(); this.mouse.leftPressed = false; }
   endFrame() { this.pressed.clear(); this.mouse.dx = 0; this.mouse.dy = 0; this.mouse.leftPressed = false; }

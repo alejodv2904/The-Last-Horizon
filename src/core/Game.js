@@ -26,6 +26,7 @@ import { TownLife } from '../systems/TownLife.js';
 import { BountySystem } from '../systems/BountySystem.js';
 import { LootSystem } from '../systems/Loot.js';
 import { UIManager } from '../ui/UIManager.js';
+import { TouchControls } from '../ui/TouchControls.js';
 
 class Game {
   // data: { story, shops: { pike, hattie }, town, bounties }
@@ -34,7 +35,10 @@ class Game {
     this.bus = new EventBus();
     this.story = story; this.townData = data.town;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.pixelRatio = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
+    this.touch = document.documentElement.classList.contains('touch');
+    // En móvil se limita más la resolución interna (las pantallas tienen DPR 3 pero la GPU va justa); el ajuste dinámico sigue activo.
+    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, this.touch ? CONFIG.MAX_PIXEL_RATIO_TOUCH : CONFIG.MAX_PIXEL_RATIO);
+    this.pixelRatio = this.maxPixelRatio;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
@@ -46,7 +50,10 @@ class Game {
     createSharedMaterials();
     this.ui = new UIManager(this.story);
     this.audio = new AudioSynthesizer();
-    this.input = new InputManager(this.renderer.domElement, this.bus);
+    this.input = new InputManager(this.renderer.domElement, this.bus, { touch: this.touch });
+    this.ui.onChoice = (i) => this.input.pressKey(`Digit${i + 1}`);
+    this.ui.onUseItem = (id) => this.useItem(id);
+    this.touchControls = this.touch ? new TouchControls(this) : null;
     this.world = new WorldManager(this);
     this.fx = { dust: new ParticleSystem(this.scene, 320, THREE.NormalBlending), glow: new ParticleSystem(this.scene, 240, THREE.AdditiveBlending) };
     this.inventory = new Inventory(this.bus, this.story.items);
@@ -80,7 +87,7 @@ class Game {
     this.bandits.law = this.law;
     this.bounties = new BountySystem(this, data.bounties);
 
-    this.mode = 'explore'; this.started = false; this.paused = true; this.elapsed = 0;
+    this.mode = 'explore'; this.started = false; this.paused = true; this.elapsed = 0; this._pausedAt = 0;
     this.skinning = null; this.death = null; this.action = null;
     this.cine = { blend: 0, side: 1, pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this._camPos = new THREE.Vector3(); this._camLook = new THREE.Vector3(); this._v = new THREE.Vector3();
@@ -102,21 +109,38 @@ class Game {
     btnNew.classList.toggle('hidden', !has);
     document.getElementById('loading-note').textContent = has
       ? 'Partida guardada encontrada. «Nueva partida» borra el progreso guardado.'
-      : 'Recomendado: Chrome o Edge. El juego ajusta la resolución automáticamente para mantener 60 FPS.';
+      : this.touch ? 'Se activará la pantalla completa en horizontal. La resolución se ajusta sola para mantener la fluidez.'
+        : 'Recomendado: Chrome o Edge. El juego ajusta la resolución automáticamente para mantener 60 FPS.';
+  }
+
+  // Pausa manual (botón táctil) o automática (girar a vertical, cambiar de app). Se reanuda tocando la pantalla.
+  pause() {
+    if (!this.started || this.paused || this.mode === 'dead') return;
+    this.paused = true; this._pausedAt = performance.now(); this.input.mouse.right = false; this.input.mouse.left = false;
+    document.getElementById('overlay-pause').classList.remove('hidden');
+    this.save.save();
   }
 
   get _menuMode() { return this.mode === 'shop' || this.mode === 'board'; }
 
   _bindEvents() {
-    window.addEventListener('resize', () => {
+    const onResize = () => {
       this.camera.aspect = window.innerWidth / window.innerHeight; this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+      // En vertical el juego se pausa (el aviso «Gira tu dispositivo» tapa la pantalla).
+      if (this.touch && window.innerHeight > window.innerWidth) this.pause();
+    };
+    window.addEventListener('resize', onResize);
+    // iOS/Android reportan el tamaño final de la pantalla con retraso tras girar.
+    window.addEventListener('orientationchange', () => { onResize(); setTimeout(onResize, 250); setTimeout(onResize, 700); });
+    document.getElementById('btn-fs').addEventListener('click', () => { if (this.touchControls) this.touchControls.enterFullscreen(); });
     document.getElementById('btn-start').addEventListener('click', () => this.start(this.save.hasSave()));
     document.getElementById('btn-new').addEventListener('click', () => { this.save.clear(); this.start(false); });
-    document.getElementById('overlay-pause').addEventListener('click', () => this.input.requestLock());
+    // Se ignora el «clic» fantasma que el navegador genera al soltar el dedo del botón de pausa (caería sobre este overlay y reanudaría).
+    document.getElementById('overlay-pause').addEventListener('click', () => { if (performance.now() - this._pausedAt > 500) this.input.requestLock(); });
     window.addEventListener('beforeunload', () => this.save.save());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.save.save(); });
+    window.addEventListener('pagehide', () => this.save.save());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.save.save(); if (this.touch) this.pause(); } });
     this.bus.on('pointerlock', (locked) => {
       if (!this.started) return;
       if (locked) { this.paused = false; document.getElementById('overlay-pause').classList.add('hidden'); this.audio.init(); }
@@ -154,6 +178,7 @@ class Game {
     if (continueSave) this.save.apply(this.save.load());
     this.started = true; this.paused = false;
     this.input.enabled = true;
+    if (this.touchControls) this.touchControls.enterFullscreen();
     document.getElementById('overlay-start').classList.add('hidden');
     this.input.requestLock();
     this.missions.updateTracker();
@@ -362,7 +387,7 @@ class Game {
     if (pf.time < 1.0) return;
     const fps = pf.frames / pf.time; pf.frames = 0; pf.time = 0;
     if (fps < 50) { pf.lowStreak++; pf.highStreak = 0; } else if (fps > 58.5) { pf.highStreak++; pf.lowStreak = 0; } else { pf.lowStreak = 0; pf.highStreak = 0; }
-    const maxPR = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
+    const maxPR = this.maxPixelRatio;
     if (pf.lowStreak >= 2 && this.pixelRatio > CONFIG.MIN_PIXEL_RATIO) {
       this.pixelRatio = Math.max(CONFIG.MIN_PIXEL_RATIO, this.pixelRatio - 0.1); this.renderer.setPixelRatio(this.pixelRatio); pf.lowStreak = 0;
     } else if (pf.highStreak >= 4 && this.pixelRatio < maxPR) {
@@ -375,6 +400,7 @@ class Game {
   /* ---------------- Bucle ---------------- */
   frame() {
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    if (this.touchControls) this.touchControls.sync();
     this._updatePerformance(dt);
     if (!this.paused || !this.started) this.update(dt);
     this.renderer.render(this.scene, this.camera);

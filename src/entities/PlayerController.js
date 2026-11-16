@@ -87,6 +87,7 @@ class PlayerController {
     if (canAct) {
       if (input.isDown('KeyW')) iz += 1; if (input.isDown('KeyS')) iz -= 1;
       if (input.isDown('KeyD')) ix += 1; if (input.isDown('KeyA')) ix -= 1;
+      ix += input.axis.x; iz += input.axis.y;   // joystick táctil
     }
     this.isMoving = ix !== 0 || iz !== 0;
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);

@@ -1,0 +1,11 @@
+{
+  "name": "The Last Horizon",
+  "short_name": "Last Horizon",
+  "description": "Aventura del Oeste en 3D: caza, comercia y sobrevive en el valle de Cedar Hollow.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
